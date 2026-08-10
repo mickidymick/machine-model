@@ -6,7 +6,7 @@
     "control_arm": "prompts/frontier-declared.md -- ACPI SLIT, hwloc, rocm-smi, vendor diagram, facility notes. What any user on the machine can obtain without measuring.",
     "treatment_arm": "prompts/frontier-compute.md -- the measured briefing.",
     "steelman": "The control is additionally given the operational notes, several of which were in fact discovered by measurement rather than documented by the facility. That is more than a real user would have, and it biases AGAINST the treatment arm. A win under those conditions is a conservative win. Category labels are audited against what the control ACTUALLY receives: q01 and q05 were moved to docs_sufficient once the control was given hwloc's core count and the per-link network note. Three questions remain docs_misleading -- SLIT flatness, directional asymmetry, and GCD count -- and none of them appears in any note.",
-    "limitation": "Answers for this preliminary run were produced by one model with the two contexts kept separate, not by independent blinded sessions across several models. Good enough to show a shape; not a study."
+    "limitation": "Answers for this preliminary run came from one model (Claude Opus 4.8, effort High) with the two contexts kept in separate fresh claude.ai conversations. Not independent blinded sessions across several models. Good enough to show a shape; not a study. Effort level is a second variable and was held constant."
   },
   "categories": {
     "docs_sufficient": "The declaration is correct and complete. Both arms should be right. These exist so the result is not 'measurement wins everywhere', which would suggest a rigged control.",

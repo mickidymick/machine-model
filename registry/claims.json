@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.2",
+  "registry_version": "0.3",
   "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
   "verdicts": {
     "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
@@ -425,6 +425,47 @@
       "verdict_rule": "undeclared. Where the manipulation is confounded, record it as confounded rather than reporting the number.",
       "consequence_if_wrong": "Placement advice valid only on an empty machine.",
       "portability": "Universal."
+    },
+    {
+      "id": "cpu.system_interference",
+      "domain": "cpu",
+      "declares": "Which cores and NUMA domains the system reserves for its own work, and where device interrupts land.",
+      "declared_source": {
+        "primary": "Slurm core specialization -- CoreSpecCount / CpuSpecList from `scontrol show node`",
+        "also": [
+          "/proc/cmdline -- isolcpus, nohz_full, rcu_nocbs (boot-time isolation nobody reads)",
+          "/proc/irq/*/smp_affinity_list -- where each IRQ is CONFIGURED to land",
+          "/sys/fs/cgroup/system.slice/cpuset.cpus -- where system services may run",
+          "hwloc device locality -- which NUMA domain hosts each NIC, NVMe and DMA engine"
+        ],
+        "note": "Several INDEPENDENT declarations that can disagree with each other. That is unusual and useful: most claims have one declaring source, so a contradiction is us versus the vendor. Here the vendor can contradict itself, and we can show it."
+      },
+      "why_it_matters": "This is the question topology-driven binding tools (mpibind and friends) exist to answer: which resources should an application be kept off. A rank sharing a core with an interrupt handler pays jitter that no bandwidth or latency number predicts, and a domain hosting the NVMe controllers carries DMA traffic the others do not.",
+      "probe": {
+        "id": "core-jitter",
+        "tool": "bin/jitter (fixed-iteration spin loop pinned per core) + /proc/interrupts delta over the same window",
+        "rationale": "Two measurements of the same thing from different angles. The interrupts delta shows where IRQs ACTUALLY land, which can differ from smp_affinity_list -- that is a configured-versus-observed discrepancy entirely inside the declared sources. The jitter loop answers the question the declarations cannot: whether the reservation is SUFFICIENT. A core can be outside the reserved set and still be periodically stolen. Report per-core p99 and max deviation from that core's own minimum, not from a global mean -- cores differ in clean-state floor and a global mean hides it.",
+        "passes": 3,
+        "conditions": {
+          "duration_per_core": ">= 100 ms, long enough to catch periodic kernel work (timer ticks, RCU callbacks)",
+          "load": "idle node -- this measures the machine's own noise, not contention",
+          "binding": "one core at a time, verified"
+        },
+        "self_check": "sched_getcpu() must match the requested core on every sample. An unpinned run silently measures the scheduler instead of the core, and produces plausible-looking jitter that means nothing.",
+        "unsuitable_probes": [
+          {
+            "probe": "wall-clock of a real application",
+            "reason": "Application noise and OS noise are indistinguishable in the aggregate. The spin loop does nothing, so every deviation is interference."
+          },
+          {
+            "probe": "reading smp_affinity_list alone",
+            "reason": "That is the configured affinity, not the observed one. It is a declared source, not a probe."
+          }
+        ]
+      },
+      "verdict_rule": "confirmed if elevated jitter and interrupt counts fall only on cores the declarations already reserve. contradicted if cores outside the reserved set carry either -- the reservation is then incomplete, and a user following the documentation still lands on a noisy core. misleading if the declared sources disagree with each other.",
+      "consequence_if_wrong": "Ranks placed on cores the system is quietly using. The cost appears as tail latency and load imbalance at scale, which is attributed to the application rather than to placement.",
+      "portability": "Universal, and the answer is expected to differ on every machine -- reservation policy is a site decision, not a hardware property. Device locality is already answerable offline from the exported hwloc XML."
     }
   ]
 }

@@ -263,6 +263,32 @@ def main(argv):
                 w(f"**Why it matters that this is open**: {r['consequence']}")
                 w()
 
+    # ---------------------------------------------------------- observations
+    # Findings that were promoted out of `flagged`. Without this section a
+    # promotion DELETES the finding from the briefing: it leaves `flagged`,
+    # nothing renders it, and the only trace is an open question referring to a
+    # result the reader never saw. Exactly what happened to gpu.die_parity.
+    if d.get('observations'):
+        w('## Measured, no declared source')
+        w()
+        w('Established by measurement and reported by nothing on the machine. '
+          'These are results, not leads -- distinct from the section below.')
+        w()
+        for o in d['observations']:
+            w(f"**{o['id']}** — {o['statement']}")
+            w()
+            if o.get('measured'):
+                flatten(o['measured'], 0)
+                w()
+            for key, label in (('why_promoted', 'Why this is now a result'),
+                               ('secondary_structure', 'Further structure'),
+                               ('consequence', 'Consequence'),
+                               ('remaining_caveat', 'Remaining caveat'),
+                               ('confidence', 'Confidence')):
+                if o.get(key):
+                    w(f"- **{label}**: {o[key]}")
+            w()
+
     # ----------------------------------------------------------------- leads
     if d.get('flagged'):
         w('## Leads — observed, deliberately not asserted')

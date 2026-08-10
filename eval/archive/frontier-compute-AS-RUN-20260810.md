@@ -416,27 +416,6 @@ Characterization on an idle node describes a machine nobody runs on. A real appl
 
 Side finding (confidence: medium): GPU-direct is markedly more sensitive to CPU contention than host transfers -- 75% degradation versus 50%.
 
-## Measured, no declared source
-
-Established by measurement and reported by nothing on the machine. These are results, not leads -- distinct from the section below.
-
-**gpu.die_parity** — Host-memory latency splits by GCD die parity. Even dies (0,2,4,6) mean 1382 ns; odd dies (1,3,5,7) mean 1224 ns. The slowest odd die beats the fastest even one in every pass.
-
-- **per pass**:
-  - pass 1, even 1388.6, odd 1223.2, gap 165.4, slowest odd to fastest even 144
-  - pass 2, even 1391.9, odd 1224.7, gap 167.2, slowest odd to fastest even 112.2
-  - pass 3, even 1365.9, odd 1224, gap 141.9, slowest odd to fastest even 91.5
-- **conditions**:
-  - **host memory**: explicitly bound per NUMA domain, verified with move_pages
-  - **buffer**: 512 MiB
-  - **passes**: 3
-
-- **Why this is now a result**: July flagged this and declined to claim it for one specific reason: host memory used default hipHostMalloc placement, so the NUMA domain was uncontrolled and the absolute numbers were 'to some host domain'. That caveat is gone -- every allocation is now bound and verified. And the separation holds in all three passes tested INDEPENDENTLY, which pooling would not have established: pooling lets one lucky pass carry a result.
-- **Further structure**: Even dies are also NUMA-sensitive (across-domain range 88-175 ns) while odd dies are nearly flat (27-55 ns), and even dies are far noisier pass-to-pass (129-155 ns vs 29-43 ns).
-- **Consequence**: Host-memory-bound kernels should prefer odd GCDs; peer-heavy kernels the even ones. Nothing in ROCm's placement logic knows this, and no declared source reports it.
-- **Remaining caveat**: One node type, one node. Not established machine-wide.
-- **Confidence**: medium
-
 ## Leads — observed, deliberately not asserted
 
 Each of these looks like structure and sits at or inside the noise band of its measurement. They are recorded so they are not lost. **They are not results.** Do not build advice on them, and do not repeat them as findings.
