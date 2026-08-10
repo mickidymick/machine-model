@@ -60,10 +60,14 @@ if not sys.stdout.isatty():
 
 def load():
     qs = json.load(open(os.path.join(HERE, 'questions.json')))
+    # `web` is optional -- it was added after the first pass. Order matters:
+    # the arms form a ladder of increasing effort and should read left to right.
     arms = {}
-    for arm in ('control', 'treatment'):
+    for arm in ('web', 'control', 'treatment'):
         p = os.path.join(HERE, f'answers_{arm}.json')
         if not os.path.exists(p):
+            if arm == 'web':
+                continue
             sys.exit(f"missing {p}\n\n"
                      f"Run eval/build_prompts.py, answer each arm in a SEPARATE\n"
                      f"fresh session, and record the outcomes there.")
@@ -117,10 +121,9 @@ def report(qs, arms, by_q, t):
     print()
 
     cw = {a: t[a]['outcomes']['confidently_wrong'] for a in t}
-    print(f"{C['b']}headline{C['r']}  confidently wrong: "
-          f"control {C['bad']}{cw.get('control','?')}{C['r']}, "
-          f"treatment {C['ok']}{cw.get('treatment','?')}{C['r']}  "
-          f"{C['dim']}of {n}{C['r']}")
+    print(f"{C['b']}headline{C['r']}  confidently wrong:  " + ',  '.join(
+        f"{a} {C['bad'] if cw[a] else C['ok']}{cw[a]}{C['r']}" for a in t)
+        + f"  {C['dim']}of {n}{C['r']}")
     print(f"{C['dim']}  These are answers a user would act on without being "
           f"prompted to check.{C['r']}\n")
 
@@ -264,17 +267,18 @@ def svg_chart(t):
         s.append(f'<text x="{padl-8}" y="{y+4:.1f}" text-anchor="end">'
                  f'{int(frac*100)}%</text>')
 
+    arms = list(t.keys())
     for i, c in enumerate(CATS):
         cx = padl + slot * (i + .5)
-        for j, arm in enumerate(('control', 'treatment')):
+        for j, arm in enumerate(arms):
             d = t[arm]['by_cat'][c]
             if not d['n']:
                 continue
             frac = d['ok'] / d['n']
             h = frac * ph
-            x = cx - bw - gap / 2 + j * (bw + gap)
+            x = cx - (len(arms) * bw + (len(arms) - 1) * gap) / 2 + j * (bw + gap)
             y = padt + ph - h
-            col = 'var(--control)' if arm == 'control' else 'var(--treatment)'
+            col = f'var(--arm-{j})'
             # 4px rounded data-end, square foot on the baseline
             r = min(4, h)
             s.append(
@@ -314,6 +318,7 @@ def main(argv):
             machine=qs['machine'], n=len(by_q),
             cw_control=t['control']['outcomes']['confidently_wrong'],
             cw_treatment=t['treatment']['outcomes']['confidently_wrong'],
+            cw_web=t.get('web', {}).get('outcomes', {}).get('confidently_wrong', '--'),
             chart=svg_chart(t), table=svg_table(t))
         with open(out, 'w') as f:
             f.write(html)

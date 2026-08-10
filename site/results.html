@@ -286,6 +286,21 @@
   .muted { color: var(--ink-3); font-size: .92rem; }
   .masthead h1 { max-width: 34ch; }
   td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right; }
+  /* Arms use the page's existing declared/measured language rather than importing
+     a second palette. Validated: CVD dE 9.8 light / 12.2 dark, normal-vision
+     15.8 / 17.6, all three >= 3:1 contrast. The two low-chroma colours "read
+     gray", so every bar is direct-labelled and a legend is always present --
+     colour never carries identity alone. */
+  :root { --arm-web: #6d7d88; --arm-declared: #a2521c; --arm-measured: #10605f; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --arm-web:#77878f; --arm-declared:#d9924f; --arm-measured:#58b3ac; }
+  }
+  :root[data-theme="dark"] { --arm-web:#77878f; --arm-declared:#d9924f; --arm-measured:#58b3ac; }
+  .g-grid { stroke: var(--rule-soft); stroke-width: 1; }
+  .g-axis { stroke: var(--rule); stroke-width: 1; }
+  .g-ax  { fill: var(--ink-3); font-family: var(--f-body); font-size: 11.5px; }
+  .g-val { fill: var(--ink); font-family: var(--f-data); font-size: 11.5px;
+           font-weight: 600; font-variant-numeric: tabular-nums; }
   .win { color: var(--measured); font-weight: 600; }
   .lose { color: var(--critical); font-weight: 600; }
 </style>
@@ -308,6 +323,59 @@
 <section>
   <div class="rail">01 &mdash; Result</div>
   <h2>The ladder</h2>
+  <figure>
+    <svg viewBox="0 0 760 300" role="img" aria-label="Success rate by question category for three arms: web, declared, measured">
+    <line x1="46" y1="242.0" x2="746" y2="242.0" class="g-grid"/>
+    <text x="38" y="246.0" text-anchor="end" class="g-ax">0%</text>
+    <line x1="46" y1="185.5" x2="746" y2="185.5" class="g-grid"/>
+    <text x="38" y="189.5" text-anchor="end" class="g-ax">25%</text>
+    <line x1="46" y1="129.0" x2="746" y2="129.0" class="g-grid"/>
+    <text x="38" y="133.0" text-anchor="end" class="g-ax">50%</text>
+    <line x1="46" y1="72.5" x2="746" y2="72.5" class="g-grid"/>
+    <text x="38" y="76.5" text-anchor="end" class="g-ax">75%</text>
+    <line x1="46" y1="16.0" x2="746" y2="16.0" class="g-grid"/>
+    <text x="38" y="20.0" text-anchor="end" class="g-ax">100%</text>
+    <path d="M74.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H108.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-web)"/>
+    <text x="93.5" y="10.0" text-anchor="middle" class="g-val">5/5</text>
+    <path d="M114.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H148.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-declared)"/>
+    <text x="133.5" y="10.0" text-anchor="middle" class="g-val">5/5</text>
+    <path d="M154.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H188.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-measured)"/>
+    <text x="173.5" y="10.0" text-anchor="middle" class="g-val">5/5</text>
+    <text x="133.5" y="262.0" text-anchor="middle" class="g-ax">Docs sufficient</text>
+    <path d="M249.5,242.0 V170.7 q0,-4.0 4.0,-4.0 H283.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-web)"/>
+    <text x="268.5" y="160.7" text-anchor="middle" class="g-val">1/3</text>
+    <path d="M289.5,242.0 V170.7 q0,-4.0 4.0,-4.0 H323.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-declared)"/>
+    <text x="308.5" y="160.7" text-anchor="middle" class="g-val">1/3</text>
+    <path d="M329.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H363.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-measured)"/>
+    <text x="348.5" y="10.0" text-anchor="middle" class="g-val">3/3</text>
+    <text x="308.5" y="262.0" text-anchor="middle" class="g-ax">Docs misleading</text>
+    <path d="M424.5,242.0 V189.5 q0,-4.0 4.0,-4.0 H458.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-web)"/>
+    <text x="443.5" y="179.5" text-anchor="middle" class="g-val">1/4</text>
+    <path d="M464.5,242.0 V189.5 q0,-4.0 4.0,-4.0 H498.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-declared)"/>
+    <text x="483.5" y="179.5" text-anchor="middle" class="g-val">1/4</text>
+    <path d="M504.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H538.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-measured)"/>
+    <text x="523.5" y="10.0" text-anchor="middle" class="g-val">4/4</text>
+    <text x="483.5" y="262.0" text-anchor="middle" class="g-ax">Measurement only</text>
+    <path d="M599.5,242.0 V133.0 q0,-4.0 4.0,-4.0 H633.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-web)"/>
+    <text x="618.5" y="123.0" text-anchor="middle" class="g-val">1/2</text>
+    <path d="M639.5,242.0 V133.0 q0,-4.0 4.0,-4.0 H673.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-declared)"/>
+    <text x="658.5" y="123.0" text-anchor="middle" class="g-val">1/2</text>
+    <path d="M679.5,242.0 V20.0 q0,-4.0 4.0,-4.0 H713.5 q4.0,0 4.0,4.0 V242.0 Z" fill="var(--arm-measured)"/>
+    <text x="698.5" y="10.0" text-anchor="middle" class="g-val">2/2</text>
+    <text x="658.5" y="262.0" text-anchor="middle" class="g-ax">Neither knows</text>
+    <line x1="46" y1="242" x2="746" y2="242" class="g-axis"/>
+    <rect x="46" y="278" width="10" height="10" rx="2.5" fill="var(--arm-web)"/>
+    <text x="61" y="287" class="g-ax">web</text>
+    <rect x="89.6" y="278" width="10" height="10" rx="2.5" fill="var(--arm-declared)"/>
+    <text x="104.6" y="287" class="g-ax">declared</text>
+    <rect x="169.2" y="278" width="10" height="10" rx="2.5" fill="var(--arm-measured)"/>
+    <text x="184.2" y="287" class="g-ax">measured</text>
+    </svg>
+    <figcaption>
+      Success rate per question category. Declining counts as success only on
+      &ldquo;neither knows,&rdquo; where declining is the correct answer.
+    </figcaption>
+  </figure>
   <div class="scroll">
     <table>
       <thead><tr>
@@ -319,7 +387,7 @@
       <tbody>
         <tr><td>Docs sufficient</td><td class="n">5/5</td><td class="n">5/5</td><td class="n">5/5</td></tr>
         <tr><td>Docs misleading</td><td class="n">1/3</td><td class="n">1/3</td><td class="n win">3/3</td></tr>
-        <tr><td>Measurement only</td><td class="n">2/4</td><td class="n">1/4</td><td class="n win">4/4</td></tr>
+        <tr><td>Measurement only</td><td class="n">1/4</td><td class="n">1/4</td><td class="n win">4/4</td></tr>
         <tr><td>Neither knows</td><td class="n">1/2</td><td class="n">1/2</td><td class="n win">2/2</td></tr>
         <tr><td><b>Confidently wrong</b></td><td class="n">0</td><td class="n lose">1</td><td class="n">0</td></tr>
       </tbody>
@@ -330,8 +398,9 @@
     makes the rest readable &mdash; if measuring had won there too, the comparison was rigged.
   </p>
   <p>
-    <b>The web arm scores as well as the curated one.</b> Everything we hand-assembled from the
-    machine, it found in the OLCF User Guide: the non-obvious NUMA&#8596;GCD map, the 56-core
+    <b>The web arm and the curated one are indistinguishable</b> &mdash; identical in every
+    category, 7 correct each. Everything we hand-assembled from the machine, it found in the
+    OLCF User Guide: the non-obvious NUMA&#8596;GCD map, the 56-core
     low-noise reservation, even Slurm&rsquo;s <code>-S 8</code> flag. So the declared arm buys
     almost nothing over free search &mdash; and the entire measurable gap is
     <b>declared &rarr; measured</b>. That is the only gap this project claims.
