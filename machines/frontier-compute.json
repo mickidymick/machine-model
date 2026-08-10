@@ -66,7 +66,7 @@
       "confidence": "high",
       "declared": {
         "source": "Zen3 specification",
-        "levels": "L1 32 KB, L2 512 KB, L3 32 MB per CCD"
+        "levels": "L1 32 KB, L2 512 KB, L3 32 MB per L3 region. The node has EIGHT L3 regions of 8 cores each (confirmed: 8 L3Cache objects in the hwloc XML); the four NPS4 NUMA domains each span two of them."
       },
       "measured": {
         "L1": {
@@ -89,12 +89,12 @@
           "unit": "ns"
         }
       },
-      "margin": "Every plateau boundary lands on the declared size. Identical across all four CCDs.",
+      "margin": "Every plateau boundary lands on the declared size. Curves were taken one per NUMA DOMAIN (four), not one per L3 region (eight) -- the four sampled curves agree, but the eight L3 regions were not sampled independently.",
       "evidence": [
         "results-frontier/cpu_curve.txt",
         "results-frontier/cpu_curve_n1..n3.txt"
       ],
-      "note": "Doubles as the calibration check for ptrchase on this machine."
+      "note": "Doubles as the calibration check for ptrchase on this machine. CORRECTION 2026-08-10: this entry previously read 'identical across all four CCDs', conflating the four NUMA domains with the CCD count. There are eight L3 regions. Caught by the treatment arm of the eval, which noticed the entry contradicted the eight OS-reserved cores (one per L3 region) recorded under cpu.core_inventory -- an internal inconsistency in the artifact, found by a consumer reading it."
     },
     {
       "claim": "cpu.core_inventory",
@@ -598,7 +598,7 @@
             "4K": 32.2,
             "delta": 18.9,
             "ratio": "2.4x",
-            "reason": "PEAK. Working set still fits in L3 (32 MB/CCD) but needs 8192 PTEs at 4K, far past TLB reach. Every access pays a page walk that itself goes to memory."
+            "reason": "PEAK. Working set still fits in L3 (32 MB per L3 region) but needs 8192 PTEs at 4K, far past TLB reach. Every access pays a page walk that itself goes to memory."
           },
           {
             "extent": "64 MB - 1 GB",

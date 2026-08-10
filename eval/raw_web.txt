@@ -1,0 +1,90 @@
+I'll research the key Frontier specifics before answering, since several of these (the NUMA–GCD mapping, core reservation, NIC bandwidth) are exactly the non-obvious facts where a confident wrong answer would hurt.
+
+Searched the web, loaded tools
+Searched the web, loaded tools
+
+Let me fetch the authoritative OLCF Frontier User Guide for the exact node layout, NUMA–GCD mapping, and core reservation.
+
+Searched the web
+Searched the web
+
+The mapping and core-reservation facts are confirmed. Let me pull the exact srun full-node recipe and low-noise details, plus cache sizes.
+
+Searched the web
+Searched the web
+
+I have what I need. The critical non-obvious facts (56 allocatable cores, the NUMA→GCD mapping, 4×200 Gbps NICs) are confirmed from the OLCF guide. Here are the answers.
+
+Q1: A node has a 64-core EPYC 7A53, but low-noise mode / core specialization (-S 8) reserves the first core of each of the 8 L3 regions, leaving 56 allocatable cores. With 2 hardware threads/core those 56 cores expose 112 hardware threads, so the largest -c that still binds is 112 with SMT (14 per L3 region) or 56 at one-thread-per-core; you cannot get 64. Practically, treat 56 as the usable core count.
+
+Q2: All four NUMA domains sit on a single EPYC package (NPS4 = four quadrants of one I/O die), so to first order the six pairs are equivalent — the ACPI SLIT for a single-socket NPS4 part reports a uniform remote distance. I do not have measured per-pair latencies for Frontier, so I can't rank fine differences (e.g. adjacent vs. diagonal quadrant); absent a measurement I would treat all six as equal.
+
+Q3: For a single-socket part the SLIT is symmetric, so I'd expect the cost to be the same in both directions. I don't have a directional microbenchmark for Frontier to prove asymmetry either way, but symmetric is the well-founded default here.
+
+Q4: Each node has 4 MI250X = 8 GCDs, and Slurm schedules them as 8 GPUs. A rank-per-GPU job should launch 8 ranks, one bound to each GCD.
+
+Q5: Nothing is wrong. The 100 GB/s is the aggregate of four Slingshot-11 NICs at 200 Gbps (25 GB/s) each. A single rank drives essentially one NIC path, so ~24 GB/s is ~96% of one NIC's ceiling; to approach 100 GB/s you need ~4 ranks spread across the 4 NICs.
+
+Q6: GCDs 0 and 1 (GPU IDs 0 and 1, cores 48–63) are the pair physically local to NUMA domain 3. Note the deliberately confusing mapping: GPU 0/1→NUMA3, 2/3→NUMA1, 4/5→NUMA0, 6/7→NUMA2.
+
+Q7: Standard Zen3 (7A53): L1 = 32 KiB data + 32 KiB instruction per core; L2 = 512 KiB private per core; L3 = 32 MiB shared per CCD/CCX (8 cores, 7 usable after the low-noise reservation). That's 8 separate 32 MiB L3 slices (256 MiB/node) — L3 is not shared across CCDs. The OLCF guide itself doesn't list cache sizes; these are the documented Zen3/EPYC-7003 values.
+
+Q8: No — a successful madvise(MADV_HUGEPAGE) only means the advice was accepted for that VMA, marking it eligible for transparent huge pages. Actual promotion still requires THP to be enabled system-wide (/sys/kernel/mm/transparent_hugepage/enabled), sufficient contiguous free memory, and the pages to actually fault in and be collapsed by khugepaged. Check /proc/self/smaps (AnonHugePages) to see whether you really got them.
+
+Q9: Yes, page size still matters. 32 MiB fits in one CCD's L3, but with 4 KiB pages that's 8192 pages, far beyond the Zen3 L2 dTLB reach (~2048 entries ≈ 8 MiB), so a random-access pattern will take page-walk (TLB) misses even though the data is cache-resident. 2 MiB huge pages need only 16 TLB entries and eliminate that, so huge pages can help a random pattern that already fits in L3.
+
+Q10: For the QMCPACK VMC loop, no — that work runs on the GPUs (HBM2e at ~1.6 TB/s per GCD), and host DDR4 (8-channel DDR4-3200, ~205 GB/s theoretical, less achievable) is not the bottleneck. Host-memory-bandwidth tuning only pays off for genuinely CPU-side, memory-bound phases (like the S4 preprocessing), not the offloaded sampling.
+
+Q11: With MPICH_GPU_SUPPORT_ENABLED=1, Cray MPICH can send straight from device buffers via the GPU transport layer, and for large messages that direct HBM→NIC path is the right choice (avoids the extra host copy). For small messages the GPU path carries extra latency and the win shrinks or reverses, so yes, the answer depends on size. I don't have a documented exact crossover byte-count for Frontier, so I won't quote one.
+
+Q12: 16 KB sits in the ambiguous small-message regime where GPU-aware MPI's benefit is marginal and the exchange is latency-bound. I can't tell you from documentation whether device or host wins at exactly 16 KB on Frontier — I'd measure both (device buffers with MPICH_GPU_SUPPORT_ENABLED=1 vs. a host-staged copy) rather than assert one. If forced to guess without a measurement, host staging often edges out at this size, but that's low-confidence.
+
+Q13: Place it on NUMA domain 3, because GCD 0 is local to NUMA 3 (cores 48–55). Confidence is high — this is straight from the OLCF core-to-GPU mapping table, not inference.
+
+Q14: No. On DDR, sustained write bandwidth is lower than read (write turnaround, and write-allocate read-for-ownership traffic on ordinary stores), so a write-heavy kernel saturates at a lower achievable GB/s than a read-heavy one; streaming/non-temporal stores recover some of it. This is a general DRAM property; I don't have a Frontier-specific measured read-vs-write number.
+
+S1 — Whole node, max throughput
+
+export OMP_NUM_THREADS=7
+export OMP_PLACES=cores
+export OMP_PROC_BIND=spread
+export MPICH_GPU_SUPPORT_ENABLED=1
+srun -N1 -n8 -c7 --gpus-per-node=8 --gpu-bind=closest ./qmcpack vmc.xml
+
+-n8 puts one rank on each of the 8 GCDs (the single-rank run was starved to 1 of 8 GCDs). -c7 gives each rank the 7 usable cores of its L3 region — 8×7 = all 56 allocatable cores. --gpu-bind=closest binds each rank to the GCD local to its NUMA domain (relying on the guide's mapping rather than guessing device order). OMP_NUM_THREADS=7 with spread/cores fills those cores with one thread each, maximizing walkers. Optional test: -c14/OMP_NUM_THREADS=14 to use SMT since walker throughput scales with threads, but SMT gains are workload-dependent — measure before trusting.
+
+S2 — Four GCDs only
+
+export OMP_NUM_THREADS=7
+export OMP_PLACES=cores
+export OMP_PROC_BIND=spread
+export MPICH_GPU_SUPPORT_ENABLED=1
+srun -N1 -n4 -c7 --gpu-bind=map_gpu:4,2,6,0 ./qmcpack vmc.xml
+
+Pick one GCD per NUMA domain — GCDs 4, 2, 6, 0 (NUMA 0/1/2/3) rather than two whole MI250X, because QMCPACK walkers are independent (no GPU-GPU traffic to preserve), so spreading maximizes CPU cores, memory channels, and NIC coverage. That's 4 ranks × 7 threads = 28 cores. Use map_gpu in that order so rank i lands on the GCD sitting in rank i's NUMA quadrant; if the policy instead hands you a fixed GPU set, fall back to --gpu-bind=closest. (Caveat: exact cpu-to-rank alignment may need an explicit --cpu-bind=map_cpu list of cores 0–6/16–22/32–38/48–54 to guarantee each rank's cores are in the same NUMA as its GCD.)
+
+S3 — One NUMA domain
+
+export OMP_NUM_THREADS=7
+export OMP_PLACES=cores
+export OMP_PROC_BIND=spread
+export MPICH_GPU_SUPPORT_ENABLED=1
+srun -N1 -n2 -c7 --gpu-bind=map_gpu:0,1 ./qmcpack vmc.xml   # NUMA 3
+
+One NUMA domain = 16 physical cores, but 2 reserved (one per its two L3 regions) → 14 usable, and 2 local GCDs (for NUMA 3 that's GCDs 0 and 1). So 2 ranks × 7 threads, 2 of 8 GCDs. Relative to the whole node you have 2/8 GCDs and 14/56 cores — about one-quarter of the node's sampling throughput, i.e. expect roughly 4× the wall-time of S1 for the same total samples, since throughput tracks engaged GCDs/threads.
+
+S4 — Memory-bound CPU preprocessing (32 MiB/thread)
+
+export OMP_NUM_THREADS=56          # one thread per allocatable core, or fewer if BW saturates
+export OMP_PLACES=cores
+export OMP_PROC_BIND=spread        # force threads across all 4 NUMA domains
+srun -N1 -n1 -c56 --cpu-bind=cores ./preprocess   # consider: numactl --interleave=all
+
+The surprises on this machine: (1) 32 MiB per thread does not live in cache — L3 is 32 MiB shared per 8-core CCD, so it looks like it should fit but per-thread it's fully DRAM-bound, and threads on the same CCD contend for that one L3 and its channels. (2) Bandwidth comes from NUMA spread, not thread count — this is one socket split into 4 NUMA domains feeding 8 memory channels, so you must bind threads across all 4 domains with first-touch initialization (or numactl --interleave=all); piling threads on one domain leaves ~3/4 of DDR bandwidth idle. (3) Only 56 cores exist (low-noise reservation), and SMT doesn't add bandwidth, so use one thread per physical core and expect BW to plateau before all 56 threads. (4) If the per-thread access is random, 2 MiB huge pages matter for TLB reach even though it's a bandwidth phase; and write-heavy portions will top out below read bandwidth (Q14).
+
+Sources consulted:
+
+OLCF Frontier User Guide (HTML) and its source .rst — node CPU/GPU counts, 56 allocatable cores + low-noise/-S 8 reservation, 4 NUMA domains / 8 L3 regions, the NUMA↔GCD↔core mapping table, 64 GB HBM2e/GCD at 1.6 TB/s, 512 GB DDR4, 36+36 GB/s H2D/D2H, 4×200 Gbps (100 GB/s) NICs, MPICH_GPU_SUPPORT_ENABLED=1.
+AMD EPYC 7003-series microarchitecture / Zen 3 references — L1/L2/L3 sizes and per-CCD L3 sharing (the OLCF guide does not list cache sizes).
+
+Questions I could not find a direct source for, and answered from general architecture reasoning with confidence flagged accordingly: Q2/Q3 (no published per-pair NUMA latency or directional measurement for Frontier — I asserted single-socket symmetry, not a measured ranking), Q11/Q12 (no documented GPU-vs-host message-size crossover for Cray MPICH on Frontier — I declined to quote a threshold), and Q14 (no Frontier-specific read-vs-write bandwidth number). Cache sizes (Q7) come from the Zen3 datasheet, not the OLCF guide.

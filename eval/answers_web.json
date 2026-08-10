@@ -1,0 +1,68 @@
+{
+  "model": "claude-opus-4-8",
+  "effort": "high",
+  "date": "2026-08-10",
+  "session": "fresh session, claude CLI",
+  "arm": "web",
+  "version": "v2",
+  "raw": "eval/raw_web.txt",
+  "scores": {
+    "q01": {
+      "outcome": "correct",
+      "note": "56 allocatable, low-noise mode, and found Slurm's -S 8 core specialization flag in the OLCF guide."
+    },
+    "q02": {
+      "outcome": "wrong",
+      "note": "Wrong but HEDGED: 'I do not have measured per-pair latencies... absent a measurement I would treat all six as equal.' Better calibrated than the curated control, which asserted a flat tie."
+    },
+    "q03": {
+      "outcome": "wrong",
+      "note": "Same shape; expects symmetry from single-socket reasoning, flags no directional microbenchmark."
+    },
+    "q04": {
+      "outcome": "correct",
+      "note": "8 GCDs from the OLCF guide."
+    },
+    "q05": {
+      "outcome": "correct",
+      "note": "4x200 Gbps aggregate; one rank drives one NIC. From published specs."
+    },
+    "q06": {
+      "outcome": "correct",
+      "note": "Full non-naive map from the OLCF core-to-GPU table. The mapping IS published."
+    },
+    "q07": {
+      "outcome": "correct",
+      "note": "Zen3 values, and volunteered that the OLCF guide does not list cache sizes."
+    },
+    "q08": {
+      "outcome": "correct",
+      "note": "madvise success != huge pages; check smaps. Missed Frontier's THP=never and craype-hugepages2M."
+    },
+    "q09": {
+      "outcome": "correct",
+      "note": "TLB reach from first principles. No magnitude."
+    },
+    "q10": {
+      "outcome": "wrong",
+      "note": "Answered 'no' about QMCPACK running on GPUs, not about the node's operating point. No knowledge of the knee, and asserted rather than hedged. q10's wording lets a right answer arrive for the wrong reason -- reword it."
+    },
+    "q11": {
+      "outcome": "hedged",
+      "note": "Direction right, explicitly declined to quote a crossover."
+    },
+    "q12": {
+      "outcome": "hedged",
+      "note": "Declined; its low-confidence guess (host) is the correct answer."
+    },
+    "q13": {
+      "outcome": "wrong",
+      "note": "'Confidence is high -- straight from the OLCF mapping table, not inference.' Published is not verified."
+    },
+    "q14": {
+      "outcome": "hedged",
+      "note": "General DRAM reasoning, explicitly no Frontier-specific number."
+    }
+  },
+  "note": "Told only the machine name, with web access. Found the OLCF User Guide and enumerated, unprompted, exactly which facts have no public source."
+}

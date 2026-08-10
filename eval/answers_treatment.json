@@ -2,65 +2,66 @@
   "model": "claude-opus-4-8",
   "effort": "high",
   "date": "2026-08-10",
-  "session": "fresh claude.ai conversation",
+  "session": "fresh session, claude CLI",
   "arm": "treatment",
+  "version": "v2",
   "raw": "eval/raw_treatment.txt",
   "scores": {
     "q01": {
       "outcome": "correct",
-      "note": "Same as control. 56 / -c 56 / hwloc 112 of 128."
+      "note": "56 / -c 56 / 112 of 128."
     },
     "q02": {
       "outcome": "correct",
-      "note": "'They are not equivalent' + all six pairs with latencies + three-tier structure + anti-correlated bandwidth. Control called this a flat tie. THE differentiator."
+      "note": "Not equivalent; six pairs in order, three-tier structure, two-tool corroboration."
     },
     "q03": {
       "outcome": "correct",
-      "note": "Not symmetric, 3->2 cheaper by 3.9ns at 3.3x the floor -- AND carried our own caveat forward: bandwidth margin only 2.1x, wants a dedicated directional run before print."
+      "note": "Directional at medium confidence, carrying our own caveat about a dedicated run."
     },
     "q04": {
       "outcome": "correct",
-      "note": "8 GCDs. Both arms correct, but control reached it via the leaked card list."
+      "note": "8 GCDs; a 4-rank launch idles half the accelerator."
     },
     "q05": {
       "outcome": "correct",
-      "note": "Per-link, linear scaling, spec is correct."
+      "note": "Per-link ~22.6 GB/s, linear to 90.3 = ~90% of spec."
     },
     "q06": {
       "outcome": "correct",
-      "note": "GCD 0,1 -- and volunteered that the map is declared-but-unverified and comes from the same vendor whose SLIT was contradicted."
+      "note": "'Low confidence... Unverified... rests on the same vendor whose CPU distance table the briefing contradicts.'"
     },
     "q07": {
       "outcome": "correct",
-      "note": "Sizes + measured latencies, and derived 14 usable cores/domain from 2 L3 groups x 8 minus 2 reserved."
+      "note": "Correct sizes AND caught an internal inconsistency in our briefing: 'four CCDs' vs the eight L3 groups implied by the reserved-core pattern."
     },
     "q08": {
       "outcome": "correct",
-      "note": "Silent failure, craype-hugepages2M relinks, verify via smaps."
+      "note": "Silent 4K backing; craype-hugepages2M relinks."
     },
     "q09": {
       "outcome": "correct",
-      "note": "2.4x with both numbers (13.3 vs 32.2ns), 8192 PTEs, and named it the worst point on the curve. Control had the mechanism but no magnitude."
+      "note": "2.4x with both figures; named it the worst point on the curve."
     },
     "q10": {
       "outcome": "correct",
-      "note": "'Tune to the knee, not the peak' -- 1.7% throughput for 2.7x latency, 98.3% at the knee, plus the read-only scope caveat. Control could not answer."
+      "note": "Knee not peak: 1.7% throughput for 2.7x latency."
     },
     "q11": {
       "outcome": "correct",
-      "note": "Both crossovers (16KB bandwidth, 256KB latency) and the sub-64KB penalty. Control had no numbers."
+      "note": "Both crossovers, sub-64KB penalty, and that the 5.5% is in the hardware path not in enabling GPU-aware MPI."
     },
     "q12": {
       "outcome": "correct",
-      "note": "Host. Correctly reasoned from the 256KB latency crossover and ping-pong paying the fixed cost every trip. Control leaned device -- the wrong direction."
+      "note": "Host -- reasoned that the 16 KB bandwidth crossover does not help a ping-pong."
     },
     "q13": {
       "outcome": "correct",
-      "note": "'Declared answer NUMA 3. My confidence is low -- this is exactly gpu.numa_affinity, which is unverified... I wouldn't state it as a measured fact.' Control said HIGHLY CONFIDENT. The Unverified section survived contact."
+      "note": "'Confidence is low... below 8% GPU-latency variance and hasn't been measured. If it matters, measure it.'"
     },
     "q14": {
       "outcome": "hedged",
-      "note": "Declined, citing the read-only sweep. Same as control -- correct behaviour, nothing to differentiate."
+      "note": "Declined, citing the read-only sweep and the explicit Not measured entry."
     }
   }
 }

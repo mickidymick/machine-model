@@ -281,147 +281,198 @@
   footer { font-size: .82rem; color: var(--ink-3); font-family: var(--f-data); }
 </style>
 <style>
-  /* page-local: the shared stylesheet has no .muted, and results.html
-     borrows that stylesheet rather than owning it. */
+  /* page-local: the shared stylesheet has no .muted, and results.html borrows
+     that stylesheet rather than owning it. */
   .muted { color: var(--ink-3); font-size: .92rem; }
   .masthead h1 { max-width: 34ch; }
+  td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right; }
+  .win { color: var(--measured); font-weight: 600; }
+  .lose { color: var(--critical); font-weight: 600; }
 </style>
 </head>
 <body>
-<title>Results — does the artifact change what a model knows?</title>
+<title>Results — what does measuring buy?</title>
 
 <div class="page">
 
 <div class="masthead">
   <div class="rail">Results &mdash; 2026-08-10</div>
-  <h1>Does the artifact change what a model knows about the machine?</h1>
-  <p class="lead-in">
-    Two arms, one model (Claude Opus 4.8, effort High), separate fresh sessions, 14 questions
-    with checkable answers. Both arms generated from the same descriptor, so the single
-    difference between them is measurement.
+  <h1>What does measuring buy, over what you can already look up?</h1>
+  <p class="standfirst">
+    Three arms, one model (Claude Opus 4.8, effort High), fresh session each, the same 14 questions
+    with checkable answers. The arms are a ladder of increasing effort: <b>what you get for free</b>,
+    <b>what you get from running every query correctly</b>, and <b>what you get from measuring</b>.
   </p>
 </div>
 
 <section>
-  <h2>The result</h2>
+  <div class="rail">01 &mdash; Result</div>
+  <h2>The ladder</h2>
   <div class="scroll">
     <table>
-      <thead><tr><th>Question category</th><th>control</th><th>treatment</th><th></th></tr></thead>
+      <thead><tr>
+        <th>Question category</th>
+        <th>web<br><span class="muted">name + search</span></th>
+        <th>declared<br><span class="muted">every query, run right</span></th>
+        <th>measured<br><span class="muted">the artifact</span></th>
+      </tr></thead>
       <tbody>
-        <tr><td>Docs sufficient</td><td>5/5</td><td>5/5</td><td class="muted">tie &mdash; the validity check</td></tr>
-        <tr><td>Docs misleading</td><td>1/3</td><td>3/3</td><td></td></tr>
-        <tr><td>Measurement only</td><td>1/4</td><td>4/4</td><td></td></tr>
-        <tr><td>Neither knows</td><td>1/2</td><td>2/2</td><td class="muted">declining is the right answer</td></tr>
-        <tr><td><b>Confidently wrong</b></td><td><b>1</b></td><td><b>0</b></td><td class="muted">incorrect, stated as fact</td></tr>
+        <tr><td>Docs sufficient</td><td class="n">5/5</td><td class="n">5/5</td><td class="n">5/5</td></tr>
+        <tr><td>Docs misleading</td><td class="n">1/3</td><td class="n">1/3</td><td class="n win">3/3</td></tr>
+        <tr><td>Measurement only</td><td class="n">2/4</td><td class="n">1/4</td><td class="n win">4/4</td></tr>
+        <tr><td>Neither knows</td><td class="n">1/2</td><td class="n">1/2</td><td class="n win">2/2</td></tr>
+        <tr><td><b>Confidently wrong</b></td><td class="n">0</td><td class="n lose">1</td><td class="n">0</td></tr>
       </tbody>
     </table>
   </div>
   <p>
-    <b>The tie on &ldquo;docs sufficient&rdquo; is the number that makes the rest trustworthy.</b>
-    Five questions the documentation answers correctly, and both arms get all five. If the
-    measured arm had won there too, the control was built to lose and nothing else on this page
-    would mean anything.
+    <b>All three tie on the questions the documentation answers correctly.</b> That is the check that
+    makes the rest readable &mdash; if measuring had won there too, the comparison was rigged.
+  </p>
+  <p>
+    <b>The web arm scores as well as the curated one.</b> Everything we hand-assembled from the
+    machine, it found in the OLCF User Guide: the non-obvious NUMA&#8596;GCD map, the 56-core
+    low-noise reservation, even Slurm&rsquo;s <code>-S 8</code> flag. So the declared arm buys
+    almost nothing over free search &mdash; and the entire measurable gap is
+    <b>declared &rarr; measured</b>. That is the only gap this project claims.
   </p>
 </section>
 
 <section>
-  <h2>Where the difference actually is</h2>
+  <div class="rail">02 &mdash; Shape</div>
+  <h2>Hedging protects you from missing facts, not from wrong ones</h2>
   <p class="lead-in">
-    It is not that the control knows less. It is that the control cannot tell the difference
-    between a fact that is missing and a fact that is wrong.
+    Where nothing is published, every arm declined cleanly. Where something wrong is published,
+    they repeat it. Asked to rank the six NUMA domain pairs by crossing cost:
+  </p>
+  <div class="compare">
+    <div class="pane">
+      <div class="cap">declared &mdash; the curated document</div>
+      <p class="verdict">&ldquo;All six pairs are equivalent. There is no cheapest or most expensive
+      pair.&rdquo;</p>
+    </div>
+    <div class="pane right">
+      <div class="cap">measured &mdash; the artifact</div>
+      <p class="verdict">&ldquo;They are not equivalent&rdquo; &mdash; then all six pairs in order,
+      with the three-tier structure and two-tool corroboration.</p>
+    </div>
+  </div>
+  <p>
+    The declared arm is not guessing. It is reporting the ACPI SLIT accurately. The SLIT is wrong.
   </p>
   <div class="note">
     <p>
-      <b>Where the documentation says nothing, the control hedges correctly.</b> On the questions
-      no source answers &mdash; the loaded-latency operating point, the host-versus-device
-      crossover, the read/write mix &mdash; it declined cleanly every time. That is good behaviour,
-      and it is why the honest reading is not &ldquo;models don't know machines.&rdquo;
+      <b>The uncomfortable part.</b> On this same question the <i>web</i> arm hedged &mdash;
+      &ldquo;I do not have measured per-pair latencies&hellip; absent a measurement I would treat
+      all six as equal&rdquo; &mdash; while the curated document did not. Handing a model a tidy,
+      authoritative-looking document made it <b>more</b> confidently wrong than letting it search.
+      Presentation conferred authority the data did not have. That finding cuts at us too: our own
+      briefing is a tidy, authoritative-looking document.
     </p>
   </div>
-  <p>
-    <b>Where the documentation is wrong, it repeats the error as fact.</b> Asked to rank the six
-    NUMA domain pairs by crossing cost:
-  </p>
-  <div class="scroll">
-    <table>
-      <thead><tr><th></th><th>answer</th></tr></thead>
-      <tbody>
-        <tr><td>control</td><td>&ldquo;All six pairs are equivalent&hellip; it&rsquo;s a flat tie.&rdquo;</td></tr>
-        <tr><td>treatment</td><td>&ldquo;They are not equivalent&rdquo; &mdash; then all six pairs, in order, with the three-tier structure</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p>
-    The control is not guessing. It is reporting the ACPI SLIT accurately. The SLIT is wrong.
-    <b>Hedging protects a model from missing information but not from false information</b> &mdash;
-    and the control&rsquo;s own good behaviour everywhere else is what proves it.
-  </p>
 </section>
 
 <section>
-  <h2>The calibration question</h2>
+  <div class="rail">03 &mdash; Calibration</div>
+  <h2>Published, corroborated, and still unverified</h2>
   <p class="lead-in">
-    One question has no verified answer on either side. The right response is to say so.
-    We asked where to place a host buffer for GCD 0, and how confident it was.
+    One claim has two independent declared sources that agree &mdash; and two measurement attempts
+    that could not discriminate it. We asked where to place a host buffer for GCD&nbsp;0, and how
+    confident it was.
   </p>
   <div class="scroll">
     <table>
-      <thead><tr><th></th><th>answer</th></tr></thead>
       <tbody>
-        <tr><td>control</td><td>&ldquo;NUMA domain 3, and I&rsquo;m <b>highly confident</b> &mdash; backed by two independent agreeing sources.&rdquo;</td></tr>
-        <tr><td>treatment</td><td>&ldquo;Declared answer: NUMA domain 3. My confidence is <b>low</b> &mdash; this is exactly <code>gpu.numa_affinity</code>, which is unverified&hellip; I wouldn&rsquo;t state it as a measured fact.&rdquo;</td></tr>
+        <tr><td>web</td><td>&ldquo;Confidence is <b>high</b> &mdash; straight from the OLCF mapping table, not inference.&rdquo;</td></tr>
+        <tr><td>declared</td><td>&ldquo;<b>High confidence</b>: two independent sources agree.&rdquo;</td></tr>
+        <tr><td>measured</td><td>&ldquo;Confidence is <b>low</b>&hellip; below 8% GPU-latency variance and hasn&rsquo;t been measured. If it matters, measure it.&rdquo;</td></tr>
       </tbody>
     </table>
   </div>
   <p>
-    Same answer, opposite calibration. Both probes we ran against that claim failed to
-    discriminate, so the artifact records it as <code>unfalsifiable_here</code> &mdash; and the
-    briefing&rsquo;s <i>Unverified</i> section survived contact with a direct question instead of
-    being promoted into a recommendation. That was the property we were least sure would hold.
+    Same answer three times, one calibration out of three. <b>Published reads as verified, and
+    corroborated reads as verified</b> &mdash; to everyone except the arm holding an artifact that
+    distinguishes them.
   </p>
 </section>
 
 <section>
-  <h2>What we got wrong, and fixed</h2>
+  <div class="rail">04 &mdash; Audit</div>
+  <h2>What we got wrong</h2>
   <p class="lead-in">
-    Three of these were caught by scoring our own experiment. They are on this page because a
-    result you cannot see the failure modes of is not a result.
+    Four of these were caught by scoring our own experiment or by a consumer reading the artifact.
+    They are on this page because a result whose failure modes you cannot see is not a result.
   </p>
-  <div class="scroll">
-    <table>
-      <thead><tr><th>Problem</th><th>Effect</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><b>The control was over-supplied.</b> Five of six &ldquo;operational notes&rdquo; were our own discoveries, including NIC scaling measured that same afternoon.</td>
-          <td>The control was running on our results relabelled as documentation. Pitfalls now carry <code>provenance</code>, and only documented ones reach it.</td>
-        </tr>
-        <tr>
-          <td><b>The scoring rubric hid most of the result.</b> Counting a hedge as success everywhere scored &ldquo;honest but no answer&rdquo; the same as &ldquo;correct.&rdquo;</td>
-          <td>Both arms tied 4/4 on measurement-only questions where one answered and the other declined. A hedge now counts only where declining <i>is</i> correct. Control moved 11/14 &rarr; 8/14.</td>
-        </tr>
-        <tr>
-          <td><b>Promoting a finding deleted it.</b> <code>gpu.die_parity</code> moved from <code>flagged</code> to <code>observations</code>; the renderer knew only about <code>flagged</code>.</td>
-          <td>The finding vanished from the briefing with no error, leaving an open question referring to a result no reader ever saw. The treatment numbers above are a lower bound.</td>
-        </tr>
-      </tbody>
-    </table>
+  <ul class="items">
+    <li>
+      <div class="hd">The control was over-supplied &mdash; and it did not matter</div>
+      <div class="bd">Five of six &ldquo;operational notes&rdquo; were our own discoveries, including
+      NIC scaling measured that same afternoon. Notes now carry <code>provenance</code> and only
+      documented ones reach the control. Re-running scored <b>identically</b>: 7 correct, 4 hedged,
+      2 wrong, 1 confidently wrong. The trimmed material was not load-bearing, so the first result
+      was not an artifact of over-supply.</div>
+    </li>
+    <li>
+      <div class="hd">The scoring rubric hid most of the result</div>
+      <div class="bd">Counting a hedge as success everywhere scored &ldquo;honest but no answer&rdquo;
+      the same as &ldquo;correct,&rdquo; so both arms tied 4/4 on measurement-only questions where
+      one answered and the other declined. A hedge now counts only where declining <i>is</i> the
+      right answer.</div>
+    </li>
+    <li class="key">
+      <div class="hd">Promoting a finding deleted it</div>
+      <div class="bd"><code>gpu.die_parity</code> moved from <code>flagged</code> to
+      <code>observations</code>; the renderer knew only about <code>flagged</code>. The finding
+      vanished from the briefing with no error, leaving an open question referring to a result no
+      reader ever saw.</div>
+    </li>
+    <li class="key">
+      <div class="hd">The artifact contradicted itself, and a consumer caught it</div>
+      <div class="bd">The cache entry claimed results &ldquo;identical across all four CCDs.&rdquo;
+      The measured arm noticed that contradicted the eight OS-reserved cores &mdash; one per L3
+      region &mdash; recorded elsewhere in the same briefing. The hwloc XML confirms <b>eight</b> L3
+      regions; the curves were taken one per NUMA <i>domain</i>, of which there are four. The entry
+      conflated the sampling unit with the hardware unit and quietly overclaimed coverage.</div>
+    </li>
+    <li class="ask">
+      <div class="hd">One question is badly worded</div>
+      <div class="bd">&ldquo;Should I tune to saturate memory bandwidth?&rdquo; can be answered
+      &ldquo;no&rdquo; for reasons unrelated to the fact being tested &mdash; the web arm said no
+      because the work runs on GPUs. Right answer, wrong reason. Needs rewording before publication.</div>
+    </li>
+  </ul>
+</section>
+
+<section>
+  <div class="rail">05 &mdash; Gap</div>
+  <h2>The public record, enumerated by the search arm itself</h2>
+  <p class="lead-in">
+    Asked afterwards which questions it could find no source for, the web arm listed them unprompted:
+  </p>
+  <div class="compare single">
+    <div class="pane">
+      <pre>no published per-pair NUMA latency or directional measurement
+no documented GPU-vs-host message-size crossover
+no Frontier-specific read-vs-write bandwidth number
+cache sizes come from the Zen3 datasheet, not the OLCF guide</pre>
+    </div>
   </div>
-  <p class="muted">
-    Both arms are being re-run against the corrected inputs. The first run is archived rather
-    than discarded &mdash; the gap between an over-supplied control and an honest one is itself a
-    measurement.
+  <p>
+    That list is the artifact&rsquo;s scope, written by something with no stake in the answer. It is
+    a better argument for measuring than any claim we could make on our own behalf.
   </p>
 </section>
 
 <section>
+  <div class="rail">06 &mdash; Limits</div>
   <h2>What this does not show</h2>
   <div class="scroll">
     <table>
       <tbody>
-        <tr><td>One model, one effort level, one session per arm.</td><td class="muted">Not blinded, not replicated across models. A shape, not a study.</td></tr>
-        <tr><td>The control is a document we curated.</td><td class="muted">A real user has an assistant with shell access that gathers what it thinks to ask for. That arm is the honest baseline and has not been run.</td></tr>
-        <tr><td>No application was actually run.</td><td class="muted">This measures what a model knows, not whether the resulting configuration is faster. That is the QMCPACK experiment, and it needs machine time.</td></tr>
-        <tr><td>One machine, largely one node.</td><td class="muted">Whether any of this generalises is what Tuolumne and Aurora are for.</td></tr>
+        <tr><td>One model, one effort level, one session per arm.</td><td class="muted">Not blinded, not replicated. A shape, not a study.</td></tr>
+        <tr><td>Scoring is ours.</td><td class="muted">We wrote the questions, the ground truth and the rubric. The per-question record is published so the calls can be checked.</td></tr>
+        <tr><td>No application was run.</td><td class="muted">This measures what a model knows, not whether the resulting configuration is faster. That is the QMCPACK experiment, and it needs machine time.</td></tr>
+        <tr><td>One machine, largely one node.</td><td class="muted">Whether any of it generalises is what Tuolumne and Aurora are for.</td></tr>
       </tbody>
     </table>
   </div>

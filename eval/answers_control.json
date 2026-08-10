@@ -1,67 +1,67 @@
 {
   "model": "claude-opus-4-8",
+  "effort": "high",
   "date": "2026-08-10",
-  "session": "fresh claude.ai conversation",
+  "session": "fresh session, claude CLI",
   "arm": "control",
+  "version": "v2",
   "raw": "eval/raw_control.txt",
   "scores": {
     "q01": {
       "outcome": "correct",
-      "note": "56 cores, -c 56 ceiling, reserved list. Exact."
+      "note": "56, -c 56, hwloc 112 of 128."
     },
     "q02": {
       "outcome": "confidently_wrong",
-      "note": "'All six pairs are equivalent... it's a flat tie.' Stated as the answer. Truth: three tiers, near-far gap 10x the noise floor. THE predicted failure."
+      "note": "'All six pairs are equivalent... There is no cheapest or most expensive pair.' Flat assertion, same as v1 -- trimming the control did not change it."
     },
     "q03": {
       "outcome": "wrong",
-      "note": "Leads with 'yes, symmetric' -- but then flags that a scalar per pair CANNOT represent asymmetry and that no directional measurement exists. Wrong answer, unusually good hedge: it identified the exact structural limitation."
+      "note": "'As reported, yes' -- but an excellent structural hedge: 'the symmetry is partly an artifact of the data format, not a measurement that ruled asymmetry out.'"
     },
     "q04": {
       "outcome": "correct",
-      "note": "8 GCDs, 8 ranks. LEAKED -- it read card0..card7 out of the gpu.numa_affinity corroboration block I added today. Not derived from the node diagram."
+      "note": "8 GCDs, from the corroboration note listing GPU[0]..GPU[7]."
     },
     "q05": {
       "outcome": "correct",
-      "note": "Quotes our own 22.7/45.1/90.3 scaling -- given to it in the operational notes."
+      "note": "Per-NIC; the retained pitfall still carries 'spread across the four domains'."
     },
     "q06": {
       "outcome": "correct",
-      "note": "GCD 0,1 -> NUMA 3, both declared sources."
+      "note": "GCD 0,1 -> NUMA 3."
     },
     "q07": {
       "outcome": "correct",
-      "note": "Cache sizes exact; volunteered 'as reported, not measured'."
+      "note": "Cache sizes and per-CCD sharing."
     },
     "q08": {
       "outcome": "correct",
-      "note": "Huge pages fail silently, craype-hugepages2M, verify via smaps."
+      "note": "Named craype-hugepages2M -- still in the retained documented pitfall."
     },
     "q09": {
       "outcome": "correct",
-      "note": "Right answer AND right mechanism from first principles -- 8192 pages vs ~2048 Zen3 L2 TLB entries -- with the TLB figure flagged as general knowledge. No magnitude. Measurement-only does not mean underivable."
+      "note": "TLB-reach mechanism, flagged as architectural reasoning not measurement."
     },
     "q10": {
       "outcome": "hedged",
-      "note": "Refused a bandwidth target, said no measurements exist. Correct behaviour."
+      "note": "Declined a bandwidth target. Also noticed NUMA 0 carries extra device traffic -- from the new cpu.system_interference entry."
     },
     "q11": {
       "outcome": "hedged",
-      "note": "General direction, explicitly no Frontier crossover numbers."
+      "note": "No machine-specific data; crossover treated as unknown."
     },
     "q12": {
       "outcome": "hedged",
-      "note": "Leans device (wrong -- truth is host below 64KB) but refuses to commit: 'empirical question, not something I can answer confidently'."
+      "note": "Leans device (wrong direction) but says confirm with a sweep."
     },
     "q13": {
       "outcome": "wrong",
-      "note": "'NUMA 3, and I'm HIGHLY CONFIDENT.' Answer matches the declared map; the CONFIDENCE is the error -- neither probe could discriminate. Exposes a rubric gap: right answer, miscalibrated certainty."
+      "note": "'High confidence: two independent sources agree.' Declared sources agreeing is not verification."
     },
     "q14": {
       "outcome": "hedged",
-      "note": "No data for this node, read or write. Exactly right."
+      "note": "'I don't know... won't invent one.' Also inferred content was being withheld -- side effect of the withholding disclosure."
     }
-  },
-  "effort": "high",
-  "note": "Opus 4.8 at High effort (the account default), not Opus 5. The treatment arm MUST use the same model AND the same effort level -- effort changes reasoning depth and hedging behaviour, so a mismatch would vary two things at once and the comparison would measure nothing."
+  }
 }
