@@ -1,0 +1,33 @@
+# Task given to every arm
+
+You are helping a computational scientist run a benchmark on Frontier, the
+supercomputer at the Oak Ridge Leadership Computing Facility.
+
+The source code is in this directory. Read it.
+
+## What I need
+
+Configure this code to run **as fast as possible** on Frontier, within the
+constraints below, and give me:
+
+1. **A build recipe** — every module load and configure/make command, in order.
+2. **A single run command** — the complete `srun` line plus any environment
+   variables it needs.
+
+Write both into `SOLUTION.sh` in this directory, as a runnable script with a
+`build()` function and a `run()` function. I will execute it as-is.
+
+## Constraints
+
+- You may use **at most 4 nodes**.
+- Your allocation budget for this run is **60 node-minutes**.
+- The problem size and iteration count are fixed and given below. Do not change
+  them — the run must do the same work regardless of how you configure it.
+
+## Ground rules
+
+- **Do not run the benchmark.** Produce the recipe and stop. I will run it.
+- If you need to inspect the machine, you may — you are on a Frontier login node
+  and standard tools are available.
+- Commit to one configuration. If you are uncertain between options, pick the
+  one you would actually run and say why in a comment.

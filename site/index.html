@@ -886,11 +886,24 @@ node   0   1   2   3
     </p>
     <p>
       Inputs are codes already built and validated here &mdash; QMCPACK, plus AMG, LULESH and GAPBS
-      from the profiler work &mdash; so no hand-built application profiles are needed. The QMCPACK
-      baseline (1 rank / 16 walkers, 155.8&nbsp;s; 8 ranks / 112 walkers, 68.0&nbsp;s) goes to
-      <i>both</i> arms: it is a fact about the application, not about the machine, and withholding it
-      would vary two things at once.
+      from the profiler work &mdash; so no hand-built application profiles are needed.
     </p>
+    <div class="note">
+      <p>
+        <b>Experiment B is built and pre-registered.</b> An agent in a clean directory with the
+        benchmark source, a fixed problem, and a node budget writes a build recipe and a run
+        command; we execute it and time it. The two arms are byte-identical directories differing
+        in <b>one file</b> &mdash; whether the measured briefing is present. Both may inspect the
+        machine and search, because Experiment A showed the declared topology is entirely public.
+      </p>
+      <p>
+        Two benchmarks, because they are expected to disagree. <b>AMG</b> (sparse, memory-bound)
+        presses the claims we measured &mdash; and the largest of them, the 2.4&times; page-size
+        penalty, is a <i>build-time</i> decision, since <code>craype-hugepages2M</code> relinks.
+        <b>QMCPACK</b> has a larger configuration surface but its big facts are in the OLCF guide,
+        so a null there is the honest prediction. Predictions are written down before the first run.
+      </p>
+    </div>
     <div class="note">
       <p>
         <b>The gap is already documented by someone else, which is the strongest part of the pitch.</b>
