@@ -1,6 +1,6 @@
 # Machine briefing: Frontier (compute node)
 
-OLCF (Oak Ridge National Laboratory). Characterized 2026-07-19.
+OLCF (Oak Ridge National Laboratory). Characterized 2026-07-19, extended 2026-08-10.
 
 - **CPU**: 1x AMD EPYC 7A53, 64 cores, 2 HWT/core, NPS4
 - **Memory**: 512 GB DDR4
@@ -30,9 +30,13 @@ Read this section before acting on any topology query you run yourself, or on an
 
 `cpu.core_inventory` — **misleading** (confidence: high)
 
-**Declared** (vendor node diagram):
-- **value**: 64
-- **unit**: cores
+**Declared** (hwloc (correct) vs vendor node diagram (misleading)):
+- **hwloc allowed PUs**: 112
+- **hwloc topology PUs**: 128
+- **hwloc reserved PU logical indices**: 112-127
+- **hwloc implication**: 56 usable cores of 64 present. hwloc reports the reservation correctly.
+- **vendor diagram**: 64 cores
+- **note**: Measured on frontier00126 2026-08-10 via hwloc 2.11.2. The declared sources DISAGREE WITH EACH OTHER: hwloc is right and the diagram is wrong. A user who runs lstopo gets the correct answer; a user who reads the node diagram does not.
 
 **Measured**:
 - **value**: 56
@@ -43,7 +47,7 @@ Read this section before acting on any topology query you run yourself, or on an
 
 **What goes wrong if you trust the declared value**: Wasted cores, or a launch line the scheduler rejects.
 
-**Note**: At -c 56 each NUMA domain gets exactly 14 cores / 28 threads, which divides cleanly. The declared 64 does not.
+**Note**: Verdict stays `misleading` but the target moves: it is the vendor diagram that misleads, not hwloc. Confirmed 2026-08-10 -- hwloc-calc reports 112 allowed of 128 topology PUs, reserved logical indices 112-127. This resolves the open question recorded in July.
 
 ### Relative cost of crossing between NUMA domains
 
@@ -156,7 +160,7 @@ Read this section before acting on any topology query you run yourself, or on an
 
 ### How many network interfaces the node has and how a job maps onto them
 
-`net.nic_inventory` — **misleading** (confidence: medium)
+`net.nic_inventory` — **misleading** (confidence: high)
 
 **Declared** (facility spec sheet):
 - **value**: 100
@@ -177,12 +181,21 @@ Read this section before acting on any topology query you run yourself, or on an
 - **host to device**:
   - **latency us**: 2.42
   - **bandwidth GBs**: 23.9
+- **scaling**:
+  - **conditions**:
+    - **tool**: osu_mbw_mr
+    - **cores per rank**: 14
+    - **note**: -c 14 confines each rank to one NUMA domain; Cray MPICH refuses NIC_POLICY=NUMA otherwise. Placement verified per rank.
+  - **1 pair MBs**: 22673.4
+  - **2 pairs MBs**: 45103
+  - **4 pairs MBs**: 90262.2
+  - **ratios**: 1.00 / 1.99 / 3.98 -- linear
+  - **per link MBs**: 22565.6
+  - **note**: 4-pair aggregate / 4 matches the 1-pair number within 0.5%.
 
-**Margin**: 23.9 GB/s is ~96% of a single link's ~25 GB/s -- excellent per-link, and one quarter of what the node can do.
+**Margin**: Scaling is linear to 4 pairs: 22.7 -> 45.1 -> 90.3 GB/s. The node reaches 90.3 GB/s, ~90% of the declared 100 GB/s. The July 23.9 GB/s was PER LINK and the spec is correct; only the natural single-pair benchmark misleads.
 
 **What goes wrong if you trust the declared value**: Quoting the single-pair result next to the 100 GB/s node spec looks like a 4x error. The declared number is correct; the natural benchmark configuration measures something else.
-
-**Probe incomplete**: The multi-NIC arm has NOT been run. osu_mbw_mr with 4 concurrent pairs and MPICH_OFI_NIC_POLICY=NUMA is already written into scripts/04_internode.sh and needs one short two-node allocation.
 
 ## What the machine reports accurately
 
@@ -360,8 +373,9 @@ Each of these presents as something other than its cause. Symptom, cause, remedy
 
 **one-rank-one-nic**
 - Symptom: Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec.
-- Cause: One rank per node crosses one of four NICs.
-- Remedy: osu_mbw_mr with 4 concurrent pairs and MPICH_OFI_NIC_POLICY=NUMA. Never quote a single-pair number as per-node.
+- Cause: One rank per node crosses one of four Slingshot NICs. 22.7 GB/s is ~90% of a single link.
+- Remedy: Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain. Measured 2026-08-10: 1/2/4 pairs give 22.7 / 45.1 / 90.3 GB/s, linear, reaching ~90% of the node spec.
+- Further: MPICH_OFI_NIC_POLICY=NUMA is NOT what does the work: with ranks already spread, setting it changes throughput by 0.13% (90262 vs 90148 MB/s). The rank spread is the whole effect. Also note -c 56 makes Cray MPICH refuse the policy outright -- 'Rank 0 is not confined to a single NUMA node'.
 
 **osu-upc-build**
 - Symptom: OSU 7.4 fails to build against the Cray toolchain.
@@ -375,7 +389,7 @@ Each of these presents as something other than its cause. Symptom, cause, remedy
 
 ## Unverified — do not rely on these
 
-### gpu.numa_affinity — untested
+### gpu.numa_affinity — unfalsifiable_here
 
 Drives --gpu-bind=closest and every host-buffer placement decision.
 
@@ -385,9 +399,12 @@ Declared but **not confirmed by measurement**:
   - **NUMA 1**: GCD 2, GCD 3
   - **NUMA 2**: GCD 6, GCD 7
   - **NUMA 3**: GCD 0, GCD 1
+- **corroboration**:
+  - **sources**: rocm-smi --showtoponuma, hwloc 2.11.2 topology (os=cardN -> NUMANode)
+  - **agreement**: exact, including the non-obvious ordering
+  - **map**: card0,1->NUMA3  card2,3->NUMA1  card4,5->NUMA0  card6,7->NUMA2
+  - **note**: Two independent declared sources agree. Since measurement cannot discriminate here, they are the only sources that get to speak on this claim.
 
-- Probe `rocm-bandwidth-test host<->device` → **unfalsifiable_here**: 25.27 GB/s +/- 0.02 across every NUMA/GCD combination. The host link saturates well below the point where placement matters for bulk copies, so bandwidth shows no trace of the affinity map. Flat is not a confirmation.
-- Probe `gpu_ptrchase host-memory latency` → **cannot_discriminate**: Host buffers were allocated with default hipHostMalloc placement, so the NUMA domain was not controlled. Comparing dies against a single shared buffer is valid; attributing latency to a domain is not.
 
 **Why it matters that this is open**: This is the claim --gpu-bind=closest depends on, and it is currently taken on faith from the same vendor whose CPU distance table is contradicted above.
 
@@ -403,14 +420,6 @@ Side finding (confidence: medium): GPU-direct is markedly more sensitive to CPU 
 
 Each of these looks like structure and sits at or inside the noise band of its measurement. They are recorded so they are not lost. **They are not results.** Do not build advice on them, and do not repeat them as findings.
 
-**gpu.die_parity** — Host-memory latency splits perfectly by GCD die parity. Even dies (0,2,4,6): 1326, 1328, 1306, 1304 ns, mean 1316. Odd dies (1,3,5,7): 1221, 1213, 1210, 1197 ns, mean 1210. No overlap -- the slowest odd die beats the fastest even one by 84 ns.
-
-- Margin: 106 ns gap against a 37.6 ns worst-case per-cell spread (~2.8x), same direction in all four packages.
-- Corroborating structure: The 12 direct weight-15 links decompose exactly into a ring of even dies, a ring of odd dies, and four on-package rungs. The two rings are NOT equivalent -- the odd ring's diagonals are the only weight-45 pairs on the machine. Reads like a fixed link budget allocated differently between the two dies in a package.
-- Ruled out: An extra XGMI hop. One intra-package hop costs 187 ns; the parity gap is 106.
-- If true, would predict: Host-memory-bound kernels should prefer odd GCDs, peer-heavy kernels even ones. Nothing in ROCm's placement logic knows this.
-- **Why not asserted**: 5 passes, one node. And host memory here is default hipHostMalloc placement, so the NUMA domain is uncontrolled -- comparing dies against one shared buffer is valid, but the absolute number is 'to some host domain'. Flagging, not asserting.
-
 **gpu.hbm_pairing** — Per-GCD HBM latency spans 365-397 ns, and pairs (0,3), (1,4), (2,5) match within 0.3 ns.
 
 - **Why not asserted**: That LOOKS like structure and sits inside the 37.6 ns noise band. Explicitly not claimed.
@@ -420,10 +429,11 @@ Each of these looks like structure and sits at or inside the noise band of its m
 Questions this document cannot answer. If asked one, say so.
 
 - Do the NUMA tiers hold across nodes? Single-node result; needs 8-16 short jobs.
-- Does hwloc report the non-naive GPU<->NUMA map correctly here? One srun with lstopo answers it, and it decides whether gpu.numa_affinity is an hwloc problem or a vendor-tool problem.
-- Does hwloc's allowed cpuset reflect the OS-reserved cores, or only the vendor diagram is wrong?
 - Can measured distances be injected back via hwloc_distances_add, so existing consumers (MPI, Slurm, mpibind, ZeroSum) pick up corrected values with no code change? Unverified against the hwloc version on Frontier -- and if it works it is the strongest deployment path in the project.
 - Is the SLIT-vs-measured discrepancy already known to OLCF, or a known firmware simplification?
 - Read/write mix for loaded latency -- currently read-only.
+- Does the uniform node-0 host preference follow the probe's main thread? Re-run pinned to a different domain. If it does, it is our artifact; if not, it is a machine property with no declared source.
+- Does gpu.numa_affinity become measurable with more passes or a different probe? The effect, if any, is below 8% GPU-latency variance.
+- Does die parity hold across nodes? Currently one node.
 
 Generated from `frontier-compute.json` (schema 0.1, registry 0.1) by render.py. Values are measurements with stated conditions, not specifications.

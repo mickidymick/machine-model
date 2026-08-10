@@ -44,10 +44,15 @@ The following is what the system reports about itself through its standard inter
 
 ### How many cores/hardware threads the job may actually use, versus how many the node physically has
 
-*Reported by: vendor node diagram*
+*Reported by: hwloc (correct) vs vendor node diagram (misleading)*
 
-- **value**: 64
-- **unit**: cores
+- **hwloc allowed PUs**: 112
+- **hwloc topology PUs**: 128
+- **hwloc reserved PU logical indices**: 112-127
+- **hwloc implication**: 56 usable cores of 64 present. hwloc reports the reservation correctly.
+- **vendor diagram**: 64 cores
+
+Measured on frontier00126 2026-08-10 via hwloc 2.11.2. The declared sources DISAGREE WITH EACH OTHER: hwloc is right and the diagram is wrong. A user who runs lstopo gets the correct answer; a user who reads the node diagram does not.
 
 ## Memory topology
 
@@ -93,6 +98,11 @@ One scalar per pair; direction not representable.
   - **NUMA 1**: GCD 2, GCD 3
   - **NUMA 2**: GCD 6, GCD 7
   - **NUMA 3**: GCD 0, GCD 1
+- **corroboration**:
+  - **sources**: rocm-smi --showtoponuma, hwloc 2.11.2 topology (os=cardN -> NUMANode)
+  - **agreement**: exact, including the non-obvious ordering
+  - **map**: card0,1->NUMA3  card2,3->NUMA1  card4,5->NUMA0  card6,7->NUMA2
+  - **note**: Two independent declared sources agree. Since measurement cannot discriminate here, they are the only sources that get to speak on this claim.
 
 ### Relative cost of device-to-device links
 
@@ -131,7 +141,7 @@ A large-page request appears to succeed.
 
 **login-nodes-not-representative** — Topology conclusions drawn on a login node do not hold on compute. login08 is EPYC 7763 + a single MI210; compute is 7A53 + 4x MI250X. Both are gfx90a so builds carry over, but no topology measurement from a login node is valid. Run 00_topo.sh inside an allocation.
 
-**one-rank-one-nic** — Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec. One rank per node crosses one of four NICs. osu_mbw_mr with 4 concurrent pairs and MPICH_OFI_NIC_POLICY=NUMA. Never quote a single-pair number as per-node.
+**one-rank-one-nic** — Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec. One rank per node crosses one of four Slingshot NICs. 22.7 GB/s is ~90% of a single link. Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain. Measured 2026-08-10: 1/2/4 pairs give 22.7 / 45.1 / 90.3 GB/s, linear, reaching ~90% of the node spec.
 
 **osu-upc-build** — OSU 7.4 fails to build against the Cray toolchain. c/upc is unconditionally in the top-level SUBDIRS and there is no configure flag to disable it; the Cray compiler has no UPC front end. Build only c/mpi.
 

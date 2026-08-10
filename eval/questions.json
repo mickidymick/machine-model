@@ -2,35 +2,31 @@
   "eval_version": "0.1",
   "machine": "frontier-compute",
   "purpose": "Does a model reason better about this machine when given measured cost instead of only what the machine declares? Both arms are generated from the same descriptor, so the single difference between them is measurement.",
-
   "method": {
     "control_arm": "prompts/frontier-declared.md -- ACPI SLIT, hwloc, rocm-smi, vendor diagram, facility notes. What any user on the machine can obtain without measuring.",
     "treatment_arm": "prompts/frontier-compute.md -- the measured briefing.",
-    "steelman": "The control is additionally given the operational notes, several of which were in fact discovered by measurement rather than documented by the facility. That is more than a real user would have, and it biases AGAINST the treatment arm. A win under those conditions is a conservative win.",
+    "steelman": "The control is additionally given the operational notes, several of which were in fact discovered by measurement rather than documented by the facility. That is more than a real user would have, and it biases AGAINST the treatment arm. A win under those conditions is a conservative win. Category labels are audited against what the control ACTUALLY receives: q01 and q05 were moved to docs_sufficient once the control was given hwloc's core count and the per-link network note. Three questions remain docs_misleading -- SLIT flatness, directional asymmetry, and GCD count -- and none of them appears in any note.",
     "limitation": "Answers for this preliminary run were produced by one model with the two contexts kept separate, not by independent blinded sessions across several models. Good enough to show a shape; not a study."
   },
-
   "categories": {
     "docs_sufficient": "The declaration is correct and complete. Both arms should be right. These exist so the result is not 'measurement wins everywhere', which would suggest a rigged control.",
     "docs_misleading": "The declaration is wrong or induces a wrong decision. The control is expected to be CONFIDENTLY WRONG -- not ignorant. This is the category that matters.",
     "measurement_only": "Nothing on the machine reports this. The control can only hedge or guess; asserting a specific answer is a failure.",
     "honesty": "Neither arm has a verified answer. The correct behaviour is to decline or flag it as unverified. Tests whether the briefing's hedges survive contact with a question."
   },
-
   "scoring": {
     "correct": "Matches ground truth, appropriately stated.",
     "hedged": "Declines or flags uncertainty where the arm genuinely cannot know. Correct behaviour, not a failure.",
     "wrong": "Incorrect, but stated tentatively.",
     "confidently_wrong": "Incorrect and stated as fact, with no hedge. The most damaging outcome: it is what a user acts on."
   },
-
   "questions": [
     {
       "id": "q01",
-      "category": "docs_misleading",
+      "category": "docs_sufficient",
       "q": "How many CPU cores can a job actually use on one compute node? What is the maximum valid value of srun -c?",
       "truth": "56, not 64. One core per L3 group is OS-reserved (0,8,16,24,32,40,48,56). `-c 56` is the ceiling; higher is rejected.",
-      "declared_says": "The node diagram shows 64 cores.",
+      "declared_says": "The vendor node diagram shows 64 cores, but hwloc reports 112 allowed PUs of 128 -- i.e. 56 usable cores. The declared sources disagree; hwloc is correct. Re-categorised from docs_misleading on 2026-08-10 once the control arm was given hwloc's output: a user who runs lstopo can get this right without measuring.",
       "claim": "cpu.core_inventory"
     },
     {
@@ -59,10 +55,10 @@
     },
     {
       "id": "q05",
-      "category": "docs_misleading",
+      "category": "docs_sufficient",
       "q": "A single rank per node achieves about 24 GB/s to another node. The node is specified at 100 GB/s injection. Is something wrong?",
       "truth": "Nothing is wrong. The node has four Slingshot NICs and one rank crosses one of them; 23.9 GB/s is ~96% of a single ~25 GB/s link. To use the node's full injection you need concurrent pairs across NICs (osu_mbw_mr, MPICH_OFI_NIC_POLICY=NUMA).",
-      "declared_says": "Facility spec: 100 GB/s injection per node.",
+      "declared_says": "Facility spec says 100 GB/s per node, AND the operational notes given to both arms now explain the per-link vs per-node distinction. Re-categorised from docs_misleading 2026-08-10: once the control is handed that note it can answer this, so labelling it 'misleading' would credit the treatment arm for a question the control was given the answer to.",
       "claim": "net.nic_inventory"
     },
     {
