@@ -1,68 +1,77 @@
-Q1: 56 usable cores, and the maximum valid srun -c is 56. The node has 64 physical cores, but one core per L3/CCD group (logical cores 0, 8, 16, 24, 32, 40, 48, 56) is OS-reserved — hwloc confirms this as 112 allowed PUs of 128 (16 reserved = 8 cores). srun -c 64 is rejected; -c 56 is the ceiling and divides cleanly into 14 cores per NUMA domain. The vendor node diagram saying "64 cores" is wrong here.
+Answering directly from the descriptor. Where the descriptor doesn't support an answer, I say so rather than guessing.
 
-Q2: All six pairs are equivalent. The ACPI SLIT reports every remote hop as 12 vs. 10 local (1.2x), and all four domains are mutually equidistant, so there is no cheapest-to-most-expensive ordering — it's a flat tie.
+PART 1 — QUESTIONS ABOUT THE MACHINE
 
-Q3: As reported, yes, it's symmetric — 1.2x each way. But I want to be precise about confidence: the distance matrix is a single scalar per pair by construction, so the format literally cannot represent an asymmetry, and no directional measurement was taken. So I can't independently confirm real-world directional symmetry; I can only say the reported model assumes it and nothing contradicts it.
+Q1: 56 cores usable, and the maximum valid srun -c is 56. hwloc reports 112 allowed PUs of 128 (indices 112–127 reserved) = 56 usable cores of 64; the vendor "64 cores" diagram is wrong here. The core-count-ceiling note confirms -c 64 is rejected and -c 56 is the ceiling, because one core per L3 group (0, 8, 16, 24, 32, 40, 48, 56) is OS-reserved.
 
-Q4: 8 — the 4x MI250X present as 8 GCDs (card0–card7), each schedulable as an independent ROCm device. A rank-per-GPU job should launch 8 ranks per node, one per GCD. (The "4 accelerators" figure counts packages, not schedulable devices.)
+Q2: All six pairs are equivalent — every remote hop is 12 (1.2× the local value of 10) in the ACPI SLIT. There is no cheapest or most expensive pair; 0-1, 0-2, 0-3, 1-2, 1-3, 2-3 all cost the same by the reported distance matrix.
 
-Q5: Nothing is wrong. A single rank crosses only one of the four Slingshot NICs, and 22.7 GB/s is ~90% of one link's practical bandwidth. The 100 GB/s figure is the aggregate across all four NICs; you reach it by spreading ranks across the four NUMA domains (-c 14 → one rank/domain). Measured scaling confirms this: 1/2/4 pairs give 22.7 / 45.1 / 90.3 GB/s, linear.
+Q3: As reported, yes, it is symmetric (12 in both directions). But note the SLIT/hwloc distance matrix is structurally one scalar per pair, so it cannot represent asymmetry even if the hardware had some — the symmetry is partly an artifact of the data format, not a measurement that ruled asymmetry out.
 
-Q6: GCD 0 and GCD 1 (card0, card1) are attached to NUMA domain 3. This is corroborated by two independent sources (rocm-smi --showtoponuma and hwloc), including the non-obvious ordering.
+Q4: 8 — the 4× MI250X present as 8 GCDs (GPU[0]..GPU[7] / card0..card7), and Slurm schedules those 8 GCDs as the GPU devices. A rank-per-GPU job should launch 8 ranks, one per GCD.
 
-Q7: L1 = 32 KB, L2 = 512 KB (both per core), L3 = 32 MB per CCD. The L3 sharing scope is one CCD — shared among that die's cores (8 physical, 7 usable after the OS reservation). These are Zen3-spec values as reported, not measured.
+Q5: Nothing is wrong. The 100 GB/s injection spec is the whole-node figure across all 4 Slingshot NICs (one per NUMA domain), so one rank crosses a single NIC ≈ 25 GB/s — your 24 GB/s matches. The one-rank-one-nic note is explicit: spread ranks across the four NUMA domains (e.g. -c 14 → one rank per domain) to engage all four NICs.
 
-Q8: Probably not — do not trust the madvise return. On this node THP is set to [never] and the hugetlb pool is empty (Total 4, Free 0), so both normal huge-page paths fail silently while still returning success. You need to module load craype-hugepages2M (it works by relinking, not a runtime flag) and then verify by inspecting /proc/self/smaps for actual 2M-backed regions.
+Q6: GCD 0 and GCD 1 are attached to NUMA domain 3 (per rocm-smi --showtoponuma, corroborated by hwloc).
 
-Q9: Yes, page size can still matter, even fitting in L3. Random access over 32 MiB with 4 KB pages touches ~8192 pages, which exceeds the Zen3 L2 (unified) TLB of ~2048 entries, so you take page-walk overhead on top of L3 hits; 2 MB pages cut that to ~16 pages, well within TLB reach. Two caveats: the exact TLB size (~2048) is from general Zen3 knowledge, not this machine's docs, and 32 MiB is right at the 32 MB L3 boundary so some eviction is likely anyway. Also recall Q8 — huge pages don't come for free here.
+Q7: L1 = 32 KB, L2 = 512 KB (both per-core), L3 = 32 MB shared per CCD. On this Zen3 part the CCD's L3 is shared across that die's 8 physical cores (7 usable after the one reserved core per L3 group).
 
-Q10: I can't give you a bandwidth target — the documentation contains no memory-bandwidth measurements ("No performance measurements were taken"). What I can say concretely: this is NPS4, so full node bandwidth only comes from spreading threads across all four NUMA domains with first-touch local allocation; confining to one domain gets roughly a quarter. Whether tuning for saturation is worth it depends on whether your kernel is actually bandwidth-bound, which the provided info doesn't tell me.
+Q8: No — success does not prove you have huge pages. The huge-pages-fail-silently note is exactly this trap: THP can be [never] and the hugetlb pool empty (Total 4 / Free 0) while the normal paths, including the madvise return, report success. Verify by inspecting smaps for the actual page-backing, and on Frontier get huge pages by loading craype-hugepages2M (relink, not a runtime flag).
 
-Q11: The provided documentation does not cover GPU-aware-MPI vs. host-staging performance, so this is general knowledge, not this machine's measured data. Generally: yes, it depends on size — large messages favor sending straight from device buffers (GPUDirect RDMA avoids an extra copy), while for small messages the fixed setup cost dominates and the two are close. I don't have Frontier-specific crossover numbers to give you.
+Q9: Yes, page size can still matter, but for the TLB, not the cache. Fitting in 32 MB L3 removes cache misses, but random access over 32 MiB with 4 KB pages needs ~8192 distinct translations, which typically overruns the L2 TLB and triggers page walks; 2 MB pages cut that to ~16 entries. Caveat: the descriptor gives no TLB sizes, so this is architectural reasoning, not something measured on this node.
 
-Q12: 16 KB is small enough that it falls in the regime where the device-vs-host choice is close, and I have no measurements from this machine to pick a winner. General practice is to use GPU-aware MPI (device buffers) to avoid manual staging, but I can't promise it beats host staging at 16 KB here. This would need to be benchmarked; I'd treat it as an empirical question, not something I can answer confidently from the docs.
+Q10: I can't give you a bandwidth target — the descriptor states plainly that no performance measurements were taken, and two measured operational notes are explicitly withheld. Whether saturation tuning pays off depends on whether your kernel is actually DRAM-bandwidth-bound, which this data can't tell you. The one machine-specific caveat I can give: NUMA 0 carries extra device/DMA traffic (see Q13/S4), so it is not a symmetric bandwidth target.
 
-Q13: Put it on NUMA domain 3, and I'm highly confident. GCD 0 (card0) maps to NUMA 3, and this is one of the few claims backed by two independent agreeing sources (rocm-smi --showtoponuma and hwloc's os=card→NUMANode topology), including the counter-intuitive ordering where the lowest card index maps to the highest NUMA node.
+Q11: The descriptor contains no data on GPU-direct vs host-staged transfer on this node, so I can't give a machine-specific answer or crossover point. From general GPU-aware-MPI practice (not this descriptor): large messages usually favor sending directly from device buffers (RDMA avoids the copy), while very small messages are latency-bound and host staging is sometimes competitive — so yes, the answer generally depends on size, but I'd treat the crossover as unknown here and measure it.
 
-Q14: I don't have data for this node — no bandwidth measurements were taken, read or write. As general DDR4 behavior (not specific to this machine): sustained write bandwidth is typically lower than read because write-allocate triggers read-for-ownership traffic and the bus incurs turnaround; non-temporal/streaming stores can recover some of it. But I can't give you a read-vs-write ratio for this hardware.
+Q12: I don't have the measured device-vs-host crossover for this machine, so I can't answer definitively. 16 KB is past the tiny-message latency floor where host staging tends to win, so device-direct via GPU-aware MPI is a reasonable default to try — but that's general reasoning, and I'd confirm with a quick sweep rather than state it as fact for this node.
 
-S1: Whole node, maximum throughput
+Q13: Put it on NUMA domain 3 — GCD 0 is physically attached there. High confidence: two independent sources agree (rocm-smi --showtoponuma and hwloc os=cardN → NUMANode), both listing all eight devices with the same mapping.
 
+Q14: I don't know — the descriptor has no write-bandwidth figures, and this is plausibly one of the two withheld measured notes. Write-heavy traffic often does not mirror read bandwidth on these parts, but I have no numbers for this node and won't invent one; measure it if it matters.
+
+PART 2 — CONFIGURING QMCPACK
+
+S1 — Whole node, maximum throughput
+
+module load craype-hugepages2M        # verify huge pages via smaps, not madvise
 export OMP_NUM_THREADS=14
-export OMP_PLACES=threads
-export OMP_PROC_BIND=close
-export MPICH_GPU_SUPPORT_ENABLED=1          # if using GPU-aware MPI
-srun -N1 -n8 -c7 --threads-per-core=2 \
-     --gpus-per-node=8 --gpu-bind=closest ./qmcpack input.xml
-
-8 ranks — one per GCD — because a starved single GCD is the exact failure mode the baseline showed (68.0 s at 8 ranks vs 155.8 s at 1). 7 cores/rank × 8 = the full 56 usable cores, landing each rank on its own CCD. --threads-per-core=2 with OMP_NUM_THREADS=14 uses both hardware threads → 112 walkers, reproducing the measured 68 s run. --gpu-bind=closest pins each rank to its NUMA-local GCD; note OLCF sometimes needs a manual ROCR_VISIBLE_DEVICES rank-wrapper if closest misbehaves.
-
-S2: Four GCDs only
-
-export OMP_NUM_THREADS=28
-export OMP_PLACES=threads
-export OMP_PROC_BIND=close
-export ROCR_VISIBLE_DEVICES=0,2,4,6
-srun -N1 -n4 -c14 --threads-per-core=2 --gpu-bind=closest ./qmcpack input.xml
-
-Pick GCD 0, 2, 4, 6 — one per NUMA domain (NUMA3→0, NUMA1→2, NUMA0→4, NUMA2→6) so each rank gets local memory, a local GPU, and a distinct NIC, rather than crowding two domains. 4 ranks, 14 cores each (a full NUMA domain per rank), 28 threads each → 112 walkers, same total sampling as S1 but on half the GPUs. Binding each rank to its own NUMA domain keeps GCD, cores and memory co-resident.
-
-S3: One NUMA domain
-
-export OMP_NUM_THREADS=14
-export OMP_PLACES=threads
-export OMP_PROC_BIND=close
-srun -N1 -n2 -c7 --threads-per-core=2 \
-     --gpu-bind=closest numactl --cpunodebind=0 --membind=0 ./qmcpack input.xml
-
-One domain gives you 14 cores and 2 GCDs (e.g. NUMA 0 → GCD 4 and 5). Run 2 ranks (one per local GCD), 7 cores each, 14 threads each → 28 walkers. Relative to the whole node this is 2/8 GPUs and 14/56 cores = one quarter of the node, so expect roughly 4x lower sampling throughput (≈4x the wall time for equivalent work) versus the 8-GCD run.
-
-S4: Memory-bound preprocessing phase
-
-module load craype-hugepages2M          # relink; then verify /proc/self/smaps
-export OMP_NUM_THREADS=56
-export OMP_PLACES=cores
 export OMP_PROC_BIND=spread
+export OMP_PLACES=threads
+export OMP_TARGET_OFFLOAD=MANDATORY
+srun -N1 -n8 -c7 --threads-per-core=2 --gpu-bind=closest ./qmcpack diamond_vmc.xml
+
+8 ranks because all 8 GCDs must be engaged — the single-rank starvation cost you 7× throughput. -c 7 × 8 = 56, exactly the usable cores (the 8 reserved L3-group cores are excluded automatically); --threads-per-core=2 + OMP_NUM_THREADS=14 gives 112 threads total → 112 walkers, matching the 68.0 s measured configuration. --gpu-bind=closest binds each rank to its NUMA-local GCD (2 ranks per NUMA domain), keeping walker data on local memory and spreading traffic across all four NICs; craype-hugepages2M because the huge-page request otherwise fails silently.
+
+S2 — Four GCDs only
+
+export OMP_NUM_THREADS=14
+export OMP_PROC_BIND=spread
+export OMP_PLACES=threads
+export OMP_TARGET_OFFLOAD=MANDATORY
+export ROCR_VISIBLE_DEVICES=4,2,6,0    # one GCD per NUMA domain: 0,1,2,3
+srun -N1 -n4 -c14 --threads-per-core=2 --gpu-bind=closest ./qmcpack diamond_vmc.xml
+
+Pick one GCD from each NUMA domain (GCD 4→N0, 2→N1, 6→N2, 0→N3) rather than four from two domains, so every rank has local memory and a distinct Slingshot NIC — this maximizes memory and network balance under the 4-GCD cap. 4 ranks × 14 cores = 56 cores, OMP_NUM_THREADS=14 × --threads-per-core=2 = 28 threads/rank → 112 total threads/walkers, so you keep full CPU/walker occupancy but on half the GPUs (expect the GCDs to be the bottleneck). --gpu-bind=closest with one rank per domain binds each to its co-located GCD.
+
+S3 — One NUMA domain
+
+export OMP_NUM_THREADS=14
+export OMP_PROC_BIND=spread
+export OMP_PLACES=threads
+export OMP_TARGET_OFFLOAD=MANDATORY
+srun -N1 -n2 -c7 --threads-per-core=2 --gpu-bind=closest --mem-bind=local ./qmcpack diamond_vmc.xml
+
+One NUMA domain gives you 14 usable cores and 2 GCDs (e.g. NUMA 3 → GCD 0 and 1), so 2 ranks, one per GCD, -c 7 each (7 cores × 2 HWT = 14 threads/rank, 28 threads total). Relative to the whole node this is ¼ of the GCDs, ¼ of the cores, and a single NIC — so roughly ~4× less sampling throughput (order of ~1/4 the walker rate), i.e. a whole-node-equivalent job would take on the order of 4× longer. --mem-bind=local keeps allocation in-domain, which matters more here since you have no bandwidth to spare.
+
+S4 — Memory-bound preprocessing (CPU-only, ~32 MiB/thread)
+
+module load craype-hugepages2M        # then confirm backing in smaps
+export OMP_NUM_THREADS=56
+export OMP_PROC_BIND=spread
+export OMP_PLACES=cores
 srun -N1 -n1 -c56 --threads-per-core=1 ./preprocess
 
-Use 56 threads, one per usable core, spread across all four NUMA domains with first-touch local allocation — NPS4 means single-domain placement caps you near a quarter of aggregate DDR4 bandwidth. Use 1 thread/core (--threads-per-core=1), since the second hardware thread adds no memory bandwidth for a bandwidth-bound kernel. The surprises: (1) "32 MiB fits in L3" is a trap — L3 is 32 MiB shared per CCD across 7 cores, so 7 threads each wanting 32 MiB overflow it and you're genuinely DRAM-bound; (2) huge pages fail silently on this node (THP [never], hugetlb pool empty), so madvise returns success while giving you 4 KB pages — load craype-hugepages2M, relink, and confirm via smaps; and (3) only 56 of 64 cores are available. One honesty caveat: I have no write-bandwidth data for this node, and DDR4 writes generally sustain less than reads, so a write-heavy preprocessing kernel may hit a lower ceiling than a read-dominated one.
+32 MiB/thread exceeds the 32 MB per-CCD L3, so this is genuinely DRAM-bandwidth-bound: use 56 threads, one per physical core, no SMT (a second thread per core adds no memory bandwidth), spread across all four NPS4 memory controllers with first-touch/local allocation. Load craype-hugepages2M and verify via smaps, since the working set will hammer the TLB and the huge-page request otherwise fails silently.
+
+The surprise: NUMA 0 is not symmetric with the others. Although SLIT reports all four domains equidistant and NPS4 looks uniform, NUMA 0 alone hosts the management NIC, both NVMe drives, and the DMA channel — so its memory controller carries extra interrupt/DMA load and a bandwidth sweep will show NUMA 0 threads lagging the other three. And if your preprocessing is write-heavy, don't assume it saturates like reads — the descriptor gives no write-bandwidth number (see Q14), so measure it.

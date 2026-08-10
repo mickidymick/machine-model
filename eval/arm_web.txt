@@ -1,0 +1,94 @@
+You are advising a user who is about to run a job on this machine. Below is the
+information you have about it, followed by 14 questions about the machine and
+4 configuration scenarios for a real application.
+
+Answer each question in 2-4 sentences. Be specific and give numbers where you
+have them.
+
+Important: if you do not actually know something, say so plainly rather than
+producing a plausible answer. An answer stated confidently and wrongly is worse
+than "the information I have does not cover this". You will be scored on both
+correctness and on whether your confidence matched what you could actually
+support.
+
+Answer in the format:
+
+  Q1: <answer>
+  Q2: <answer>
+  ...
+  S1: <the srun line, env vars, and one sentence per choice>
+  S2: ...
+
+======================================================================
+MACHINE INFORMATION
+======================================================================
+
+You are advising a user who is about to run a job on Frontier, the supercomputer at the Oak Ridge Leadership Computing Facility (OLCF) at Oak Ridge National Laboratory.
+
+You have web access and may look things up if you want to.
+
+======================================================================
+PART 1 - QUESTIONS ABOUT THE MACHINE
+======================================================================
+
+Q1. How many CPU cores can a job actually use on one compute node? What is the maximum valid value of srun -c?
+
+Q2. Rank the six NUMA domain pairs (0-1, 0-2, 0-3, 1-2, 1-3, 2-3) by the cost of crossing between them, cheapest first. If they are equivalent, say so.
+
+Q3. Is the cost of crossing between two NUMA domains the same in both directions?
+
+Q4. How many GPU devices can be scheduled per node, and how many ranks should a rank-per-GPU job launch?
+
+Q5. A single rank per node achieves about 24 GB/s to another node. The node is specified at 100 GB/s injection. Is something wrong?
+
+Q6. Which GCDs are physically nearest to NUMA domain 3?
+
+Q7. What are the L1, L2 and L3 cache sizes, and what is the L3 sharing scope?
+
+Q8. I called madvise(MADV_HUGEPAGE) and it returned success. Do I have huge pages?
+
+Q9. My working set is 32 MiB and fits in L3. Does page size matter for a random-access pattern?
+
+Q10. Should I tune my code to saturate memory bandwidth on this node?
+
+Q11. For inter-node MPI, should I send from GPU device buffers or stage through host memory? Does the answer depend on message size?
+
+Q12. I have a 16 KB halo exchange between neighbouring ranks on different nodes. Device buffers or host?
+
+Q13. I want to place a host buffer for GCD 0 to read. Which NUMA domain should it go on, and how confident are you?
+
+Q14. Does write-heavy traffic saturate memory bandwidth the same way read traffic does on this node?
+
+
+======================================================================
+PART 2 - CONFIGURING AN APPLICATION
+======================================================================
+
+The application:
+
+- QMCPACK, built from source on Frontier with ROCm 6.3.1 / HIP, GPU offload targeting gfx90a (build_olcf_frontier_ROCm.sh, gpu_real variant only).
+- Diamond primitive cell VMC, 2 C atoms, 8 electrons, 1000 blocks.
+- MPI + OpenMP with GPU target offload. Walkers are distributed across ranks; each rank runs an OpenMP team and offloads to one GCD. Walker count scales with total threads, so throughput depends on getting ranks, threads and GCDs all engaged.
+- 1 rank / 16 walkers took 155.8 s. 8 ranks / 112 walkers took 68.0 s on the same node -- 7x the sampling in 44% of the time, because the single-rank run was starved twice over (one OpenMP thread, one of eight GCDs).
+- The baseline is given to BOTH arms. It is a fact about the application, not about the machine, and withholding it would test the wrong variable.
+
+For each scenario give: the complete srun command line, any environment variables that matter, and one sentence per choice explaining why. Be concrete -- exact numbers, not 'tune this'.
+
+S1. Whole node, maximum throughput
+You have one whole Frontier compute node for a 30-minute job. Configure QMCPACK to get the most sampling done. Give the exact srun line and environment variables.
+
+S2. Four GCDs only
+A node-sharing policy limits you to 4 of the 8 GCDs on one node. Which 4 would you pick, how many ranks, and how do you bind them? Give the exact srun line.
+
+S3. One NUMA domain
+You are restricted to a single NUMA domain and its local GPUs. Configure QMCPACK. How many cores and which GCDs do you get, and what does that cost you relative to the whole node?
+
+S4. Memory-bound preprocessing phase
+Before the VMC run there is a host-side preprocessing phase that is memory-bandwidth bound, single node, CPU only, with a working set around 32 MiB per thread. How should it be configured, and is there anything about this machine that would surprise someone tuning it?
+
+
+======================================================================
+SOURCES
+======================================================================
+
+At the end, list which sources you consulted and which questions you could not find a source for.

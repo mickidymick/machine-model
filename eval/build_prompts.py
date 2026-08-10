@@ -50,6 +50,18 @@ def main():
         'treatment': os.path.join(ROOT, 'prompts', 'frontier-compute.md'),
     }
 
+    # The WEB arm has no descriptor-derived context at all -- just the machine's
+    # name and permission to look things up. This is the baseline a real user
+    # actually has today: they type "I'm on Frontier, how do I configure this"
+    # and the model searches. The curated `control` document only exists because
+    # we already did the work, so it is an expert's best case, not a baseline.
+    WEB_CONTEXT = (
+        "You are advising a user who is about to run a job on Frontier, the "
+        "supercomputer at the Oak Ridge Leadership Computing Facility (OLCF) at "
+        "Oak Ridge National Laboratory.\n\n"
+        "You have web access and may look things up if you want to."
+    )
+
     qblock = '\n\n'.join(
         f"Q{i+1}. {q['q']}" for i, q in enumerate(questions))
 
@@ -61,11 +73,14 @@ def main():
     sblock = '\n\n'.join(
         f"S{i+1}. {s['name']}\n{s['prompt']}" for i, s in enumerate(scenarios))
 
-    for arm, path in arms.items():
-        if not os.path.exists(path):
-            sys.exit(f"missing {path} -- generate it first")
-        with open(path) as f:
-            context = f.read()
+    for arm, path in list(arms.items()) + [('web', None)]:
+        if path is None:
+            context = WEB_CONTEXT
+        else:
+            if not os.path.exists(path):
+                sys.exit(f"missing {path} -- generate it first")
+            with open(path) as f:
+                context = f.read()
 
         out = os.path.join(HERE, f'arm_{arm}.txt')
         with open(out, 'w') as f:
@@ -85,6 +100,12 @@ def main():
             f.write('The application:\n\n' + appblock + '\n\n')
             f.write(sc['output_format'] + '\n\n')
             f.write(sblock + '\n')
+            if arm == 'web':
+                f.write('\n\n' + '=' * 70 + '\n')
+                f.write('SOURCES\n')
+                f.write('=' * 70 + '\n\n')
+                f.write('At the end, list which sources you consulted and which '
+                        'questions you could not find a source for.\n')
 
         n = os.path.getsize(out)
         print(f"{arm:<10} {out}  {n} bytes  ~{n//4000}k tokens")
