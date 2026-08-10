@@ -1,0 +1,514 @@
+You are advising a user who is about to run a job on this machine. Below is the
+information you have about it, followed by 14 questions about the machine and
+4 configuration scenarios for a real application.
+
+Answer each question in 2-4 sentences. Be specific and give numbers where you
+have them.
+
+Important: if you do not actually know something, say so plainly rather than
+producing a plausible answer. An answer stated confidently and wrongly is worse
+than "the information I have does not cover this". You will be scored on both
+correctness and on whether your confidence matched what you could actually
+support.
+
+Answer in the format:
+
+  Q1: <answer>
+  Q2: <answer>
+  ...
+  S1: <the srun line, env vars, and one sentence per choice>
+  S2: ...
+
+======================================================================
+MACHINE INFORMATION
+======================================================================
+
+# Machine briefing: Frontier (compute node)
+
+OLCF (Oak Ridge National Laboratory). Characterized 2026-07-19.
+
+- **CPU**: 1x AMD EPYC 7A53, 64 cores, 2 HWT/core, NPS4
+- **Memory**: 512 GB DDR4
+- **Accelerator**: 4x AMD MI250X (8 GCDs)
+- **Network**: Slingshot-11, 4x NIC per node
+
+## How to use this document
+
+This is a **measured** description of one node type, not a spec sheet. Where the machine's own topology interfaces (hwloc, ACPI tables, vendor query tools) disagree with measurement, the measured value is given first and the declared value is shown alongside it, because other tools on this system are still acting on the declared one.
+
+Rules for reasoning with what follows:
+
+1. **Do not upgrade a hedge.** Items under *Unverified* and *Leads* are not established. Do not present them as facts, and do not build a recommendation whose correctness depends on them.
+2. **Conditions are part of every number.** A latency measured on 4K pages, or a bandwidth measured across one of four network links, does not generalise to other conditions. The conditions are stated; carry them.
+3. **Regime-dependent costs are not scalars.** Several costs here change sign or magnitude with working-set size, offered load, or message size. Answer with the regime, not an average.
+4. **Say when the answer is not in here.** This document covers one node type and, for topology, effectively one node. If a question needs data it does not contain, say so rather than interpolating.
+
+**Measurement provenance.** ptrchase, loaded_lat and bwmatrix were validated against Intel MLC on corsys4 (Xeon Gold 6246R) before use here: peak bandwidth within 0.6%, saturated latency within the random-vs-sequential delta.
+
+**Coverage.** Single node type and effectively a single node for the topology results. No node-to-node variability study. Whether these NUMA tiers hold machine-wide is open.
+
+## Where this machine misdescribes itself
+
+Read this section before acting on any topology query you run yourself, or on any advice derived from vendor documentation.
+
+### How many cores/hardware threads the job may actually use, versus how many the node physically has
+
+`cpu.core_inventory` — **misleading** (confidence: high)
+
+**Declared** (vendor node diagram):
+- **value**: 64
+- **unit**: cores
+
+**Measured**:
+- **value**: 56
+- **unit**: usable cores
+- **reserved**: 0, 8, 16, 24, 32, 40, 48, 56
+
+**Margin**: One core per L3 group is OS-reserved. `srun -c 56` is the ceiling; anything higher is rejected outright.
+
+**What goes wrong if you trust the declared value**: Wasted cores, or a launch line the scheduler rejects.
+
+**Note**: At -c 56 each NUMA domain gets exactly 14 cores / 28 threads, which divides cleanly. The declared 64 does not.
+
+### Relative cost of crossing between NUMA domains
+
+`numa.distance_matrix` — **contradicted** (confidence: high)
+
+**Declared** (ACPI SLIT via numactl -H, relayed by hwloc_distances_get):
+- **matrix**:
+  - [10, 12, 12, 12]
+  - [12, 10, 12, 12]
+  - [12, 12, 10, 12]
+  - [12, 12, 12, 10]
+- **implication**: All four domains mutually equidistant; every remote hop costs 1.2x local.
+
+**Measured**:
+- **unit**:
+  - **latency**: ns
+  - **bandwidth**: MB/s
+- **conditions**:
+  - **pages**: 4K
+  - **threads**: 1
+  - **access**: random
+  - **n**: 3
+- **local**:
+  - **latency**: 101.5
+  - **bandwidth**: 44582
+- **tiers**:
+  -
+    - **tier**: near
+    - **pairs**: 0<->1, 2<->3
+    - **latency**: 107.9, 108.9
+    - **bandwidth**: 43750, 43962
+  -
+    - **tier**: mid
+    - **pairs**: 0<->2, 1<->3
+    - **latency**: 115.8, 116.1
+    - **bandwidth**: 43219, 43020
+  -
+    - **tier**: far
+    - **pairs**: 1<->2, 0<->3
+    - **latency**: 119.2, 120
+    - **bandwidth**: 42841, 42397
+
+**Margin**: Near-to-far gap is 12.1 ns against a 1.2 ns noise floor (~10x), and 1353 MB/s against 289 MB/s (~4.7x). Two independently written tools -- one pointer-chasing, one streaming -- produce identical rank ordering across all six pairs, with perfect anti-correlation between latency and bandwidth.
+
+**What goes wrong if you trust the declared value**: Anything reading numa_distance() treats these four domains as interchangeable. Page placement and migration policy driven by the declared matrix systematically underestimates crossing cost.
+
+**Conditions**: Measured on 4K pages because huge pages cannot be allocated on a remote domain here (see mem.page_backing). Absolute values run ~16 ns high; the local-vs-remote structure is unaffected.
+
+**Note**: Magnitudes differ 4x between metrics: latency spans 11% across pairs (18% counting local), bandwidth only 3.5% (4.9%). A bandwidth-only study would reasonably call these domains interchangeable. Which metric you measure determines whether you see the topology at all.
+
+### Implicitly, that crossing cost is symmetric -- a single scalar per pair
+
+`numa.symmetry` — **contradicted** (confidence: medium)
+
+**Declared** (hwloc distance matrix shape):
+- **implication**: One scalar per pair; direction not representable.
+
+**Measured**:
+- **example pair**: 2/3
+- **2->3**:
+  - **latency**: 110.8
+  - **bandwidth**: 43662
+- **3->2**:
+  - **latency**: 106.9
+  - **bandwidth**: 44263
+
+**Margin**: 3.9 ns latency difference against a 1.2 ns floor (3.3x); 601 MB/s against 289 MB/s (2.1x). Both metrics agree on the direction -- 3->2 is better in both.
+
+**What goes wrong if you trust the declared value**: No scalar distance can express this. The declared model is not merely miscalibrated, it is structurally insufficient.
+
+**Note**: Confidence held at medium rather than high: the bandwidth margin is only 2.1x the floor. Worth a dedicated directional run before leaning on it in print.
+
+### How many accelerator devices exist and how they are indexed
+
+`gpu.device_inventory` — **misleading** (confidence: high)
+
+**Declared** (node diagram):
+- **value**: 4x MI250X
+
+**Measured**:
+- **value**: 8
+- **unit**: schedulable GCDs
+- **note**: Each MI250X exposes two Graphics Compute Dies; the GCD is the unit ROCm and Slurm schedule.
+
+**Margin**: Factor of 2 between the package count on the diagram and the addressable device count.
+
+**What goes wrong if you trust the declared value**: A rank-per-GPU launch built from the diagram idles half the accelerator. Observed directly: the 1-rank QMCPACK run was starved twice over -- one OpenMP thread and one of eight GCDs.
+
+### That a large-page request was honoured
+
+`mem.page_backing` — **contradicted** (confidence: high)
+
+**Declared** (THP sysfs + hugetlb pool + madvise return):
+- **implication**: A large-page request appears to succeed.
+
+**Measured**:
+- **thp setting**: never
+- **hugetlb pool**:
+  - **HugePages Total**: 4
+  - **HugePages Free**: 0
+- **outcome**: Both normal paths to huge pages fail SILENTLY. Allocation succeeds; backing is 4K.
+
+**Margin**: Verified via smaps rather than trusting the madvise return.
+
+**What goes wrong if you trust the declared value**: Every latency measurement taken without verification is silently wrong and still looks plausible. Three experiments in this campaign produced clean, plausible, WRONG nulls for exactly this reason.
+
+**Working path**: craype-hugepages2M is required, and it works by RELINKING the binary, not via a runtime flag.
+
+**Further complication**: craype-hugepages2M provisions only the LOCAL node's pool. Once linked, the default allocator ABORTS under a remote `numactl -m`. Consequence for this campaign: local latency must be measured with the module and the NUMA matrix without it -- two separate passes, which is why numa.distance_matrix is on 4K pages.
+
+### How many network interfaces the node has and how a job maps onto them
+
+`net.nic_inventory` — **misleading** (confidence: medium)
+
+**Declared** (facility spec sheet):
+- **value**: 100
+- **unit**: GB/s injection per node
+- **nics**: 4
+- **interfaces**: hsn0, hsn1, hsn2, hsn3
+
+**Measured**:
+- **conditions**:
+  - **ranks per node**: 1
+  - **nics crossed**: 1
+- **host to host**:
+  - **latency us**: 2.38
+  - **bandwidth GBs**: 22.6
+- **device to device**:
+  - **latency us**: 2.55
+  - **bandwidth GBs**: 23.9
+- **host to device**:
+  - **latency us**: 2.42
+  - **bandwidth GBs**: 23.9
+
+**Margin**: 23.9 GB/s is ~96% of a single link's ~25 GB/s -- excellent per-link, and one quarter of what the node can do.
+
+**What goes wrong if you trust the declared value**: Quoting the single-pair result next to the 100 GB/s node spec looks like a 4x error. The declared number is correct; the natural benchmark configuration measures something else.
+
+**Probe incomplete**: The multi-NIC arm has NOT been run. osu_mbw_mr with 4 concurrent pairs and MPICH_OFI_NIC_POLICY=NUMA is already written into scripts/04_internode.sh and needs one short two-node allocation.
+
+## What the machine reports accurately
+
+These may be trusted from the system's own interfaces. Listed so a consumer knows which queries are reliable here, not only which are not.
+
+**Number, size and sharing scope of cache levels** — `cpu.cache_hierarchy` via Zen3 specification. Every plateau boundary lands on the declared size. Identical across all four CCDs.
+- **L1**:
+  - **value**: 1.1
+  - **unit**: ns
+  - **extent**: <=32 KB
+- **L2**:
+  - **value**: 3.4
+  - **unit**: ns
+  - **extent**: <=512 KB
+- **L3**:
+  - **value**: 10.9-13.3
+  - **unit**: ns
+  - **extent**: <=32 MB
+- **DRAM**:
+  - **value**: 87-89
+  - **unit**: ns
+  - _Doubles as the calibration check for ptrchase on this machine._
+
+**Number of NUMA domains and which cores and memory belong to each** — `numa.domain_count` via hwloc / numactl -H. Loaded latency, peak bandwidth and cache hierarchy are equivalent on all four domains. The domains are genuine peers; only the crossing cost differs.
+- **value**: 4
+- **diagonal uniform**: yes
+  - _This confirmation is load-bearing for numa.distance_matrix: it establishes that the tier structure found there is a crossing cost, not domains being intrinsically different._
+
+**Relative cost of device-to-device links** — `gpu.interconnect_cost` via rocm-smi XGMI link weights. No overlap between bands -- 79 ns of clear air between class 1 and 2, 139 ns between 2 and 3. Spacing is linear at ~10.8 ns per weight unit.
+- **unit**: ns
+- **conditions**:
+  - **n**: 5
+  - **access**: random peer chase
+- **bands**:
+  -
+    - **weight**: 15
+    - **links**: 12
+    - **mean**: 563.2
+    - **range**: 525.8, 591.1
+  -
+    - **weight**: 30
+    - **links**: 14
+    - **mean**: 724.2
+    - **range**: 669.8, 743.8
+  -
+    - **weight**: 45
+    - **links**: 2
+    - **mean**: 888.1
+    - **range**: 882.7, 897.8
+  - _THE CONTROL. Same machine, same vendor, same firmware, two topology cost tables: the GPU weight table is accurate and linear, the CPU SLIT is flat and wrong. That turns numa.distance_matrix from 'firmware tables are unreliable' into 'AMD describes its GPU interconnect accurately and its CPU interconnect not at all' -- specific and actionable rather than lazy._
+
+**Device cache levels and memory sizes** — `gpu.memory_hierarchy` via MI250X specification / rocminfo. L1 and L2 boundaries match the MI250X specification.
+- **unit**: ns
+- **vector L1**:
+  - **value**: 33
+  - **extent**: <=16 KB
+- **L2**:
+  - **value**: 115-122
+- **HBM local**:
+  - **value**: 375
+- **peer near**:
+  - **value**: 540
+  - **note**: on-package partner GCD
+- **peer far**:
+  - **value**: 730
+- **host**:
+  - **value**: 1250
+  - **note**: ~3.4x local HBM
+- **bandwidth**:
+  - **HBM self**: ~1 TB/s
+  - **xgmi on package**: 133-145 GB/s uni, 254-272 bidi
+  - **cross package**: 37-77 GB/s
+  - _No stock tool reports pointer-chase latency on MI250X memory. This is a measurement gap gpu_ptrchase fills, not a re-measurement._
+
+## Costs that nothing on the machine reports
+
+No topology interface, table, or spec sheet carries these. They are measurement-only, and most are **curves rather than single values** — the cost depends on a named regime variable. Answer with the regime.
+
+### cost.page_size_penalty
+
+The penalty is not a constant. It is zero while the TLB covers the working set, spikes where TLB reach fails but cache still holds, then settles to an offset. A single scalar cannot express it, which is why no declarative source carries it.
+
+- **unit**: ns
+- **regime variable**: working set size
+- **regimes**:
+  - extent <=256 KB, huge same, 4K same, delta 0, reason TLB covers the working set
+  - extent 512 KB, huge 3.6, 4K 5.4, delta 1.8
+  - extent 1-8 MB, huge 10.9-13, 4K 12-15, delta ~2
+  - extent 16 MB, huge 13.1, 4K 17.5, delta 4.4
+  - extent 32 MB, huge 13.3, 4K 32.2, delta 18.9, ratio 2.4x, reason PEAK. Working set still fits in L3 (32 MB/CCD) but needs 8192 PTEs at 4K, far past TLB reach. Every access pays a page walk that itself goes to memory.
+  - extent 64 MB - 1 GB, huge 58-89, 4K 67-103, delta 9-14, reason Both effects saturated; settles to a roughly constant offset
+
+**Shape**: Zero, then 2.4x, then a constant offset. There is no single number that describes this.
+
+**Consequence**: TLB misses reported as memory latency. The worst case is at a working set that still fits in cache, which is exactly where a developer would not look for it.
+
+**Note**: Latency effect only. Streaming bandwidth barely notices page size -- 107,765 huge vs 107,342 4K on corsys4 -- because sequential reads amortise the walk across a whole page.
+
+### cost.loaded_latency_knee
+
+Peak bandwidth and usable bandwidth are different operating points, often far apart. The knee, not the peak, is where a real application should sit.
+
+- **conditions**:
+  - **threads**: 1 latency + 27 bandwidth
+  - **traffic**: read-only
+  - **domain**: 0
+- **peak**:
+  - **bandwidth MBs**: 44521
+  - **latency ns**: 832
+- **knee**:
+  - **bandwidth MBs**: 43752
+  - **latency ns**: 234
+  - **inject delay**: 56
+- **idle floor**:
+  - **bandwidth MBs**: 653
+  - **latency ns**: 89
+
+**Shape**: 98.3% of peak bandwidth is available at 2.7x lower latency. Between injection delay 52 and 56 latency collapses 634 -> 234 ns while bandwidth falls only 1.7%.
+
+**Consequence**: Tuning to saturate bandwidth costs a factor of 2.7 in latency for 1.7% of throughput.
+
+**Cross-validation**: Idle floor 89.0 ns agrees with ptrchase huge-page local (85.9 ns) and the cache curve DRAM plateau (87.9 ns) -- three measurements, two independent tools, within 3.5%.
+
+**Open**: A 400 ns step remains between delay 52 and 56. The transition is genuinely sharp but has not been proven with points inside it.
+
+**Not measured**: Read/write mix. This probe sweeps read-only traffic; MLC sweeps ratios. Write traffic saturates differently.
+
+### cost.host_device_transfer
+
+Whether device-resident buffers beat host-staged ones changes sign with message size. A single-size measurement gives the wrong universal answer.
+
+- **regime variable**: message size
+- **at 4MiB**:
+  - **host MBs**: 22635.8
+  - **host spread**: 8.1
+  - **device MBs**: 23876.8
+  - **device spread**: 10.3
+  - **advantage**: +5.48%
+  - **latency us**:
+    - **host**: 191.12
+    - **device**: 180.48
+    - **advantage**: +5.90%
+- **crossovers**:
+  - **bandwidth**: 16 KB
+  - **latency**: 256 KB
+- **small message penalty**: 12-14% worse below 64 KB
+
+**Shape**: The 4 MiB bandwidth gap is 82x the across-pass spread; the latency gap is 30x. Device latency varied 0.02 us across three passes (0.011%) -- the most reproducible measurement in the campaign. Passes were INTERLEAVED, not blocked, so drift over the allocation cannot masquerade as a residency effect.
+
+**Control**: GPU-aware MPI run with HOST buffers on both ends landed within 0.02% of plain host. Enabling GPU support costs nothing by itself; the entire 5.5% lives in the hardware path between the NIC and the memory it reads. One run eliminated a whole hypothesis family.
+
+**Practical reading**: Bandwidth turns positive at 16 KB, latency not until 256 KB -- a streaming benchmark keeps messages in flight and amortises the fixed cost, a ping-pong pays it every round trip. Production GPU HPC and LLM training move megabytes and sit far above both crossovers. The small-message penalty applies to halo exchanges and small collectives.
+
+**Open**: Contention versus cache coherence on host DMA. The discriminating test was confounded -- see cost.contention_sensitivity.
+
+## Operational pitfalls
+
+Each of these presents as something other than its cause. Symptom, cause, remedy.
+
+**huge-pages-fail-silently**
+- Symptom: Latency numbers plausible but ~16 ns high; no error anywhere.
+- Cause: THP is [never] and the hugetlb pool is empty (Total 4, Free 0). Both normal paths fail silently.
+- Remedy: Load craype-hugepages2M -- it works by relinking, not a runtime flag. Then verify via smaps; do not trust the madvise return.
+- Further: Once linked, the default allocator ABORTS under a remote `numactl -m`, because the module provisions only the local node's pool. Local latency and the NUMA matrix need two separate passes.
+
+**core-count-ceiling**
+- Symptom: `srun -c 64` is rejected.
+- Cause: One core per L3 group is OS-reserved: 0, 8, 16, 24, 32, 40, 48, 56.
+- Remedy: `-c 56` is the ceiling. It also divides cleanly: 14 cores / 28 threads per NUMA domain.
+
+**login-nodes-not-representative**
+- Symptom: Topology conclusions drawn on a login node do not hold on compute.
+- Cause: login08 is EPYC 7763 + a single MI210; compute is 7A53 + 4x MI250X.
+- Remedy: Both are gfx90a so builds carry over, but no topology measurement from a login node is valid. Run 00_topo.sh inside an allocation.
+
+**one-rank-one-nic**
+- Symptom: Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec.
+- Cause: One rank per node crosses one of four NICs.
+- Remedy: osu_mbw_mr with 4 concurrent pairs and MPICH_OFI_NIC_POLICY=NUMA. Never quote a single-pair number as per-node.
+
+**osu-upc-build**
+- Symptom: OSU 7.4 fails to build against the Cray toolchain.
+- Cause: c/upc is unconditionally in the top-level SUBDIRS and there is no configure flag to disable it; the Cray compiler has no UPC front end.
+- Remedy: Build only c/mpi.
+
+**qmcpack-build-script**
+- Symptom: The shipped Frontier build script fails or takes 4-8 hours.
+- Cause: config/build_olcf_frontier_ROCm.sh hardcodes BOOST_ROOT to /ccs/proj/mat151 (inaccessible outside that project) and builds all eight variants.
+- Remedy: Use the boost/1.86.0 module and build only gpu_real -- about 15 minutes.
+
+## Unverified — do not rely on these
+
+### gpu.numa_affinity — untested
+
+Drives --gpu-bind=closest and every host-buffer placement decision.
+
+Declared but **not confirmed by measurement**:
+- **map**:
+  - **NUMA 0**: GCD 4, GCD 5
+  - **NUMA 1**: GCD 2, GCD 3
+  - **NUMA 2**: GCD 6, GCD 7
+  - **NUMA 3**: GCD 0, GCD 1
+
+- Probe `rocm-bandwidth-test host<->device` → **unfalsifiable_here**: 25.27 GB/s +/- 0.02 across every NUMA/GCD combination. The host link saturates well below the point where placement matters for bulk copies, so bandwidth shows no trace of the affinity map. Flat is not a confirmation.
+- Probe `gpu_ptrchase host-memory latency` → **cannot_discriminate**: Host buffers were allocated with default hipHostMalloc placement, so the NUMA domain was not controlled. Comparing dies against a single shared buffer is valid; attributing latency to a domain is not.
+
+**Why it matters that this is open**: This is the claim --gpu-bind=closest depends on, and it is currently taken on faith from the same vendor whose CPU distance table is contradicted above.
+
+### cost.contention_sensitivity — undeclared
+
+Characterization on an idle node describes a machine nobody runs on. A real application is using its cores.
+
+- **Confounded**: The load generator consumes cores as well as bandwidth. The GPU-direct path needs more host CPU, so core starvation swamped the effect under test. Recorded as confounded rather than reported as a number.
+
+Side finding (confidence: medium): GPU-direct is markedly more sensitive to CPU contention than host transfers -- 75% degradation versus 50%.
+
+## Leads — observed, deliberately not asserted
+
+Each of these looks like structure and sits at or inside the noise band of its measurement. They are recorded so they are not lost. **They are not results.** Do not build advice on them, and do not repeat them as findings.
+
+**gpu.die_parity** — Host-memory latency splits perfectly by GCD die parity. Even dies (0,2,4,6): 1326, 1328, 1306, 1304 ns, mean 1316. Odd dies (1,3,5,7): 1221, 1213, 1210, 1197 ns, mean 1210. No overlap -- the slowest odd die beats the fastest even one by 84 ns.
+
+- Margin: 106 ns gap against a 37.6 ns worst-case per-cell spread (~2.8x), same direction in all four packages.
+- Corroborating structure: The 12 direct weight-15 links decompose exactly into a ring of even dies, a ring of odd dies, and four on-package rungs. The two rings are NOT equivalent -- the odd ring's diagonals are the only weight-45 pairs on the machine. Reads like a fixed link budget allocated differently between the two dies in a package.
+- Ruled out: An extra XGMI hop. One intra-package hop costs 187 ns; the parity gap is 106.
+- If true, would predict: Host-memory-bound kernels should prefer odd GCDs, peer-heavy kernels even ones. Nothing in ROCm's placement logic knows this.
+- **Why not asserted**: 5 passes, one node. And host memory here is default hipHostMalloc placement, so the NUMA domain is uncontrolled -- comparing dies against one shared buffer is valid, but the absolute number is 'to some host domain'. Flagging, not asserting.
+
+**gpu.hbm_pairing** — Per-GCD HBM latency spans 365-397 ns, and pairs (0,3), (1,4), (2,5) match within 0.3 ns.
+
+- **Why not asserted**: That LOOKS like structure and sits inside the 37.6 ns noise band. Explicitly not claimed.
+
+## Limits of this briefing
+
+Questions this document cannot answer. If asked one, say so.
+
+- Do the NUMA tiers hold across nodes? Single-node result; needs 8-16 short jobs.
+- Does hwloc report the non-naive GPU<->NUMA map correctly here? One srun with lstopo answers it, and it decides whether gpu.numa_affinity is an hwloc problem or a vendor-tool problem.
+- Does hwloc's allowed cpuset reflect the OS-reserved cores, or only the vendor diagram is wrong?
+- Can measured distances be injected back via hwloc_distances_add, so existing consumers (MPI, Slurm, mpibind, ZeroSum) pick up corrected values with no code change? Unverified against the hwloc version on Frontier -- and if it works it is the strongest deployment path in the project.
+- Is the SLIT-vs-measured discrepancy already known to OLCF, or a known firmware simplification?
+- Read/write mix for loaded latency -- currently read-only.
+
+Generated from `frontier-compute.json` (schema 0.1, registry 0.1) by render.py. Values are measurements with stated conditions, not specifications.
+
+
+======================================================================
+PART 1 - QUESTIONS ABOUT THE MACHINE
+======================================================================
+
+Q1. How many CPU cores can a job actually use on one compute node? What is the maximum valid value of srun -c?
+
+Q2. Rank the six NUMA domain pairs (0-1, 0-2, 0-3, 1-2, 1-3, 2-3) by the cost of crossing between them, cheapest first. If they are equivalent, say so.
+
+Q3. Is the cost of crossing between two NUMA domains the same in both directions?
+
+Q4. How many GPU devices can be scheduled per node, and how many ranks should a rank-per-GPU job launch?
+
+Q5. A single rank per node achieves about 24 GB/s to another node. The node is specified at 100 GB/s injection. Is something wrong?
+
+Q6. Which GCDs are physically nearest to NUMA domain 3?
+
+Q7. What are the L1, L2 and L3 cache sizes, and what is the L3 sharing scope?
+
+Q8. I called madvise(MADV_HUGEPAGE) and it returned success. Do I have huge pages?
+
+Q9. My working set is 32 MiB and fits in L3. Does page size matter for a random-access pattern?
+
+Q10. Should I tune my code to saturate memory bandwidth on this node?
+
+Q11. For inter-node MPI, should I send from GPU device buffers or stage through host memory? Does the answer depend on message size?
+
+Q12. I have a 16 KB halo exchange between neighbouring ranks on different nodes. Device buffers or host?
+
+Q13. I want to place a host buffer for GCD 0 to read. Which NUMA domain should it go on, and how confident are you?
+
+Q14. Does write-heavy traffic saturate memory bandwidth the same way read traffic does on this node?
+
+
+======================================================================
+PART 2 - CONFIGURING AN APPLICATION
+======================================================================
+
+The application:
+
+- QMCPACK, built from source on Frontier with ROCm 6.3.1 / HIP, GPU offload targeting gfx90a (build_olcf_frontier_ROCm.sh, gpu_real variant only).
+- Diamond primitive cell VMC, 2 C atoms, 8 electrons, 1000 blocks.
+- MPI + OpenMP with GPU target offload. Walkers are distributed across ranks; each rank runs an OpenMP team and offloads to one GCD. Walker count scales with total threads, so throughput depends on getting ranks, threads and GCDs all engaged.
+- 1 rank / 16 walkers took 155.8 s. 8 ranks / 112 walkers took 68.0 s on the same node -- 7x the sampling in 44% of the time, because the single-rank run was starved twice over (one OpenMP thread, one of eight GCDs).
+- The baseline is given to BOTH arms. It is a fact about the application, not about the machine, and withholding it would test the wrong variable.
+
+For each scenario give: the complete srun command line, any environment variables that matter, and one sentence per choice explaining why. Be concrete -- exact numbers, not 'tune this'.
+
+S1. Whole node, maximum throughput
+You have one whole Frontier compute node for a 30-minute job. Configure QMCPACK to get the most sampling done. Give the exact srun line and environment variables.
+
+S2. Four GCDs only
+A node-sharing policy limits you to 4 of the 8 GCDs on one node. Which 4 would you pick, how many ranks, and how do you bind them? Give the exact srun line.
+
+S3. One NUMA domain
+You are restricted to a single NUMA domain and its local GPUs. Configure QMCPACK. How many cores and which GCDs do you get, and what does that cost you relative to the whole node?
+
+S4. Memory-bound preprocessing phase
+Before the VMC run there is a host-side preprocessing phase that is memory-bandwidth bound, single node, CPU only, with a working set around 32 MiB per thread. How should it be configured, and is there anything about this machine that would surprise someone tuning it?

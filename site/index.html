@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { display: block; max-width: 100%; }
+</style>
+</head>
+<body>
+<title>A measured machine descriptor for national HPC systems</title>
+
+<style>
+  :root {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+
+    --f-data: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    --f-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+    --gutter: 7.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #0e1417;
+      --surface-1:  #151d21;
+      --ink:        #dfe7eb;
+      --ink-2:      #9dadb6;
+      --ink-3:      #77878f;
+      --rule:       #2a373d;
+      --rule-soft:  #202b30;
+      --measured:   #58b3ac;
+      --measured-bg:#122b2b;
+      --declared:   #d9924f;
+      --declared-bg:#2c2115;
+      --critical:   #d97570;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0e1417;
+    --surface-1:  #151d21;
+    --ink:        #dfe7eb;
+    --ink-2:      #9dadb6;
+    --ink-3:      #77878f;
+    --rule:       #2a373d;
+    --rule-soft:  #202b30;
+    --measured:   #58b3ac;
+    --measured-bg:#122b2b;
+    --declared:   #d9924f;
+    --declared-bg:#2c2115;
+    --critical:   #d97570;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; flex-direction: column; gap: 1.25rem; }
+  .kicker {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.25rem;
+  }
+  h1 {
+    font-family: var(--f-data);
+    font-size: clamp(1.6rem, 4vw, 2.35rem);
+    line-height: 1.14;
+    letter-spacing: -.025em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    max-width: 26ch;
+  }
+  .standfirst { font-size: 1.06rem; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .standfirst b { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections with gutter rail ---- */
+  section { display: grid; gap: 1.15rem; }
+  @media (min-width: 60rem) {
+    section {
+      grid-template-columns: var(--gutter) minmax(0, 1fr);
+      column-gap: 2.5rem;
+    }
+    /* Row 1 only. Spanning N rows forces N row tracks, and the row-gaps
+       between the empty ones pile up as dead space at the section's end. */
+    section > .rail { grid-column: 1; grid-row: 1; }
+    section > :not(.rail) { grid-column: 2; }
+  }
+  .rail {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: .45rem;
+    border-top: 2px solid var(--ink);
+    align-self: start;
+  }
+  h2 {
+    font-family: var(--f-data);
+    font-size: 1.14rem;
+    font-weight: 600;
+    letter-spacing: -.015em;
+    margin: 0;
+    text-wrap: balance;
+    border-top: 2px solid var(--ink);
+    padding-top: .45rem;
+  }
+  @media (min-width: 60rem) { h2 { border-top: none; padding-top: .35rem; } }
+  section p { margin: 0; max-width: 68ch; }
+  .lead-in { font-size: 1.02rem; }
+
+  /* ---- lists ---- */
+  .items { list-style: none; display: flex; flex-direction: column; gap: 1.05rem; margin: 0; padding: 0; }
+  .items > li { display: flex; flex-direction: column; gap: .28rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
+  .items > li > .hd { font-weight: 600; }
+  .items > li > .bd { color: var(--ink-2); font-size: .95rem; max-width: 68ch; }
+  .items > li.key { border-left-color: var(--measured); }
+  .items > li.ask { border-left-color: var(--declared); }
+  .num { font-family: var(--f-data); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--measured); }
+  .when {
+    font-family: var(--f-data);
+    font-size: .72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--declared);
+  }
+
+  /* ---- figures ---- */
+  figure { margin: 0; display: flex; flex-direction: column; gap: .7rem; }
+  figure svg { max-width: 100%; height: auto; color: var(--ink); display: block; }
+  figcaption { font-size: .87rem; color: var(--ink-2); max-width: 68ch; }
+  .dg-box   { fill: var(--surface-1); stroke: currentColor; stroke-width: 1; }
+  .dg-acc   { fill: var(--measured-bg); stroke: var(--measured); stroke-width: 1.4; }
+  .dg-ghost { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-slot  { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-t     { fill: currentColor; font-family: var(--f-data); font-size: 12.5px; }
+  .dg-s     { fill: var(--ink-2); font-family: var(--f-body); font-size: 11px; }
+  .dg-l     { fill: var(--ink-3); font-family: var(--f-data); font-size: 10.5px; letter-spacing: .06em; }
+  .dg-a     { fill: var(--measured); font-family: var(--f-data); font-size: 12.5px; }
+  .dg-line  { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .dg-linea { stroke: var(--measured); stroke-width: 1.6; fill: none; }
+  .dg-dash  { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+  .dg-head  { fill: var(--ink); }
+  .dg-heada { fill: var(--measured); }
+
+  /* ---- side by side ---- */
+  .compare { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  @media (min-width: 48rem) { .compare { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 48rem) { .compare.single { grid-template-columns: 1fr; } }
+  .pane { background: var(--surface-1); padding: 1rem 1.1rem 1.15rem; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+  .pane .cap {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pane.right .cap { color: var(--measured); }
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--f-data);
+    font-size: .78rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  pre b { color: var(--ink); font-weight: 600; }
+  pre .m { color: var(--measured); }
+  pre .d { color: var(--declared); }
+  .pane .verdict { font-size: .89rem; color: var(--ink); }
+
+  code {
+    font-family: var(--f-data);
+    font-size: .88em;
+    background: var(--surface-1);
+    padding: .05em .3em;
+    border: 1px solid var(--rule-soft);
+  }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem .8rem .5rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--rule);
+  }
+  /* ---- knob table: verdict + status markers ---- */
+  .kn { font-weight: 600; }
+  .kn code { background: none; border: none; padding: 0; }
+  td.v { font-size: .87rem; }
+  .v-yes::before  { content: "\2713\00a0"; color: var(--measured); font-weight: 700; }
+  .v-part::before { content: "\007e\00a0"; color: var(--declared); font-weight: 700; }
+  .v-no::before   { content: "\2717\00a0"; color: var(--critical); font-weight: 700; }
+  .v-none::before { content: "\2014\00a0"; color: var(--ink-3); font-weight: 700; }
+  .st {
+    font-family: var(--f-data);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .st-in   { color: var(--measured); }
+  .st-part { color: var(--declared); }
+  .st-open { color: var(--ink-3); }
+  .legend {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem 1.4rem;
+  }
+
+  .note {
+    background: var(--surface-1);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--measured);
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    font-size: .93rem;
+  }
+  .note.warn { border-left-color: var(--declared); }
+  .note p { max-width: 68ch; }
+  a { color: var(--measured); }
+  a:focus-visible { outline: 2px solid var(--measured); outline-offset: 2px; }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 0; }
+  footer { font-size: .82rem; color: var(--ink-3); font-family: var(--f-data); }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="kicker">
+      <span>Proposal</span><span>7 Aug 2026</span><span>from the Scalable Tools Workshop</span>
+    </div>
+    <h1>Benchmark the national machines, and hand the result to the model.</h1>
+    <p class="standfirst">
+      Every big system ships a description of <em>how it is wired</em>. None of them ships a
+      description of <em>what the wiring costs</em>. The idea is to measure that, once per machine,
+      into a portable artifact that sits beside hwloc rather than replacing it &mdash; and then to
+      render it as text a language model can read, so that a model reasoning about someone's code
+      knows the actual machine instead of a spec sheet. <b>Two machines are now in it &mdash;
+      Frontier and corsys4 &mdash; and the same firmware table is wrong on both, in two different
+      ways.</b>
+    </p>
+  </header>
+
+  <section>
+    <div class="rail">01 &mdash; Gap</div>
+    <h2>What a user can get today, and what they can't</h2>
+    <p class="lead-in">
+      hwloc and <code>lstopo</code> are excellent at structure: how many cores, which caches, which
+      NUMA domains, where the devices hang. That is a wiring diagram. It answers "what is connected
+      to what," and it is correct.
+    </p>
+    <p>
+      It does not answer "what does crossing this cost, under what conditions, and where does the
+      cost change regime." Where the topology stack does try to carry cost &mdash; the ACPI SLIT,
+      relayed through <code>numa_distance()</code> and <code>hwloc_distances_get()</code> &mdash; it
+      can be measurably wrong, and there is nothing in the interface that tells you it is wrong.
+      Every user who needs those numbers either re-derives them by hand or guesses from vendor
+      documentation, and that work is thrown away when the allocation ends.
+    </p>
+  </section>
+
+  <section>
+    <div class="rail">02 &mdash; Idea</div>
+    <h2>One portable question list, one artifact per machine, many renderers</h2>
+    <p class="lead-in">
+      The questions a user needs answered before placing work are the same on every machine. The
+      answers are not. So the question list travels and the answers stay local.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 920 350" role="img" aria-label="A portable claim registry drives per-machine measurement; hwloc and firmware supply declared values verbatim while benchmark probes supply measured cost, both landing in one descriptor whose disagreements are kept as records, which several renderers then read.">
+        <defs>
+          <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="dg-head" />
+          </marker>
+          <marker id="arwa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="dg-heada" />
+          </marker>
+        </defs>
+
+        <!-- registry -->
+        <rect class="dg-box" x="300" y="14" width="290" height="52" />
+        <text class="dg-t" x="316" y="36">registry/claims.json</text>
+        <text class="dg-s" x="316" y="54">the questions + which probe falsifies each</text>
+        <path class="dg-dash" d="M 445 66 L 445 104" marker-end="url(#arw)" />
+        <text class="dg-l" x="456" y="90">SAME ON EVERY MACHINE</text>
+
+        <!-- sources -->
+        <rect class="dg-box" x="20" y="120" width="210" height="56" />
+        <text class="dg-t" x="34" y="143">hwloc &middot; SLIT &middot; rocm-smi</text>
+        <text class="dg-s" x="34" y="161">what the machine says it is</text>
+
+        <rect class="dg-box" x="20" y="212" width="210" height="56" />
+        <text class="dg-t" x="34" y="235">ptrchase &middot; bwmatrix &middot; OSU</text>
+        <text class="dg-s" x="34" y="253">probes, inside a real allocation</text>
+
+        <path class="dg-line" d="M 230 148 L 292 163" marker-end="url(#arw)" />
+        <text class="dg-l" x="238" y="140">VERBATIM</text>
+        <path class="dg-linea" d="M 230 240 L 292 224" marker-end="url(#arwa)" />
+        <text class="dg-l" x="238" y="262">WITH CONDITIONS</text>
+
+        <!-- descriptor, with ghosts for other machines -->
+        <rect class="dg-ghost" x="316" y="94" width="290" height="200" />
+        <rect class="dg-ghost" x="308" y="102" width="290" height="200" />
+        <rect class="dg-box"   x="300" y="110" width="290" height="200" />
+        <text class="dg-t" x="316" y="133">machines/frontier-compute.json</text>
+
+        <rect class="dg-slot" x="316" y="146" width="258" height="36" />
+        <text class="dg-t" x="328" y="163">declared</text>
+        <text class="dg-s" x="328" y="176">kept even where it is wrong</text>
+
+        <rect class="dg-acc" x="316" y="192" width="258" height="36" />
+        <text class="dg-a" x="328" y="209">measured</text>
+        <text class="dg-s" x="328" y="222">value + conditions + spread + n</text>
+
+        <rect class="dg-slot" x="316" y="238" width="258" height="52" />
+        <text class="dg-t" x="328" y="255">discrepancy</text>
+        <text class="dg-s" x="328" y="268">verdict, confidence,</text>
+        <text class="dg-s" x="328" y="281">what breaks if you trust declared</text>
+
+        <text class="dg-l" x="620" y="98">CORSYS4 &mdash; DONE, SAME SCHEMA</text>
+        <text class="dg-l" x="620" y="112">TUOLUMNE, AURORA &mdash; NEXT</text>
+
+        <!-- renderers -->
+        <path class="dg-linea" d="M 590 200 L 648 150" marker-end="url(#arwa)" />
+        <path class="dg-line"  d="M 590 205 L 648 199" marker-end="url(#arw)" />
+        <path class="dg-line"  d="M 590 212 L 648 247" marker-end="url(#arw)" />
+        <path class="dg-line"  d="M 590 218 L 648 295" marker-end="url(#arw)" />
+
+        <rect class="dg-acc"  x="654" y="126" width="252" height="42" />
+        <text class="dg-a" x="668" y="152">LLM briefing &mdash; primary</text>
+
+        <rect class="dg-box" x="654" y="178" width="252" height="42" />
+        <text class="dg-t" x="668" y="204">HTML report &mdash; for people</text>
+
+        <rect class="dg-box" x="654" y="230" width="252" height="42" />
+        <text class="dg-t" x="668" y="256">annotated hwloc XML</text>
+
+        <rect class="dg-box" x="654" y="282" width="252" height="42" />
+        <text class="dg-t" x="668" y="308">check.py &mdash; fidelity score</text>
+      </svg>
+      <figcaption>
+        The registry is the portable part &mdash; it moves to a new machine unchanged, and empty
+        slots on that machine are expected, not errors. Declared and measured land side by side in
+        one file; the disagreement between them is a record, not a footnote. Everything on the right
+        is a projection of that one file.
+      </figcaption>
+    </figure>
+
+    <ul class="items">
+      <li class="key">
+        <span class="hd">Declared values are never overwritten.</span>
+        <span class="bd">
+          It would be easy to write measured tiers over the SLIT and produce a topology file that
+          happens to be right. That destroys the only evidence that everything else on the machine
+          reading <code>numa_distance()</code> is currently wrong. Renderers may lead with the
+          corrected number; the artifact keeps both.
+        </span>
+      </li>
+      <li>
+        <span class="hd">This is not a competitor to hwloc &mdash; hwloc is a prerequisite.</span>
+        <span class="bd">
+          Its real achievement is a common nomenclature across wildly different machines, and that
+          should never be reimplemented. Where measured cost can be pushed back in, the target is
+          hwloc <em>memory attributes</em>, registered under our own name beside the native ones, so
+          the operation is additive. Not distances &mdash; a distance is one scalar per pair and
+          structurally cannot hold a direction, which matters because the measured cost on Frontier
+          is directional.
+        </span>
+      </li>
+      <li>
+        <span class="hd">Producing the artifact and consuming it are different jobs.</span>
+        <span class="bd">
+          The producer needs compilers, ROCm and an allocation. The consumer needs Python and the
+          JSON file. A domain scientist should never have to build a pointer-chase benchmark to
+          benefit from one having been run.
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="rail">03 &mdash; Artifact</div>
+    <h2>What one claim actually looks like in the file</h2>
+    <p class="lead-in">
+      The artifact is a JSON file per node type, one record per question. Below is a real record,
+      trimmed only for width &mdash; the NUMA distance claim on <b>corsys4</b>, the Optane box in the
+      lab. Same registry, same schema, different vendor.
+    </p>
+
+    <div class="compare single">
+      <div class="pane right">
+        <span class="cap">machines/corsys4.json &mdash; one of fifteen records</span>
+<pre>{
+  "claim": "numa.distance_matrix",
+  <b>"verdict"</b>: <span class="d">"contradicted"</span>,
+  <b>"probe_validated"</b>: "yes",
+  <b>"confidence"</b>: "high",
+
+  <span class="d">"declared"</span>: {
+    "source": "ACPI SLIT via numactl -H, relayed by hwloc_distances_get",
+    "matrix": [[10, 17], [17, 10]],
+    "implication": "Reaching node 1 costs 1.70x a local access."
+  },
+
+  <span class="m">"measured"</span>: {
+    "conditions": { "tool": "Intel MLC v3.12", "access": "sequential",
+                    "prefetchers": "disabled by MLC via MSR", "n": 1 },
+    "local":    { "latency": <span class="m">74.8</span>,  "bandwidth": <span class="m">106692.3</span> },
+    "to_node1": { "latency": <span class="m">175.8</span>, "bandwidth": <span class="m">37231.5</span> },
+    "latency_ratio": <span class="m">2.35</span>, "bandwidth_ratio": <span class="m">2.87</span>,
+    "declared_ratio": <span class="d">1.70</span>
+  },
+
+  <b>"margin"</b>: "The declared 1.70x understates the measured latency cost by
+     38% and the measured bandwidth cost by 69%. Beyond the calibration
+     error, the two measured ratios disagree with each other by 22% -- so
+     there is no value of the scalar that would have been right for both.",
+
+  <b>"consequence"</b>: "Everything reading numa_distance() underestimates what
+     crossing costs, and here the far node is a different memory technology,
+     so the underestimate lands on migration and tiering policy specifically.
+     A tiering engine that prices demotion off the declared distance is off
+     by more than a third before it starts.",
+
+  <b>"conditions_caveat"</b>: "Single MLC invocation, sequential access, so these
+     are not comparable in absolute nanoseconds to Frontier's 3-pass random
+     pointer chase. The ratios are internally consistent and that is what the
+     claim rests on. The tier gap is independently reproduced by the copy
+     matrix, which verifies placement via move_pages.",
+
+  "evidence": ["mlc/results/latency_matrix.txt",
+               "mlc/results/bandwidth_matrix.txt",
+               "mlc/results/copy_matrix.txt"]
+}</pre>
+      </div>
+    </div>
+
+    <p>
+      Six fields carry the weight, and none of them is the number. <code>verdict</code> and
+      <code>margin</code> say how far off the machine is and against what noise.
+      <code>probe_validated</code> is asserted separately from the verdict, so a probe that silently
+      failed cannot pass as a confirmation. <code>consequence</code> is what a consumer gets wrong by
+      believing the declared value. <code>conditions_caveat</code> is the part that keeps the number
+      from being quoted somewhere it doesn't apply. <code>evidence</code> points back at raw files
+      that stay in the characterization repo &mdash; the descriptor is a model distilled from
+      results, not an archive of them.
+    </p>
+
+    <p>
+      Fifteen records like that, plus flagged leads, pitfalls and open questions, is the whole
+      artifact. <span class="num">309</span> lines render to a briefing of about
+      <span class="num">4.4k</span> tokens.
+    </p>
+  </section>
+
+  <section>
+    <div class="rail">04 &mdash; Output</div>
+    <h2>The same fact, as the machine reports it and as the artifact reports it</h2>
+    <p class="lead-in">
+      This is the part worth showing rather than describing. Both panes are real output for the same
+      question &mdash; what does it cost to reach another NUMA domain on a Frontier node.
+    </p>
+
+    <div class="compare">
+      <div class="pane">
+        <span class="cap">Today &mdash; numactl / lstopo</span>
+<pre>NUMA node(s):  4
+node 0 cpus:   0-15,64-79
+node 0 size:   127785 MB
+...
+node distances:
+node   0   1   2   3
+  0:  <b>10  12  12  12</b>
+  1:  <b>12  10  12  12</b>
+  2:  <b>12  12  10  12</b>
+  3:  <b>12  12  12  10</b></pre>
+        <span class="verdict">
+          Four mutually equidistant domains. Structure, no cost, no conditions, no provenance &mdash;
+          and no signal that any of it is contradicted by the hardware.
+        </span>
+      </div>
+      <div class="pane right">
+        <span class="cap">Rendered briefing &mdash; same node</span>
+<pre><b>numa.distance_matrix</b> — <span class="d">contradicted</span>
+  (confidence: high)
+
+<span class="d">Declared</span> (ACPI SLIT via numactl -H,
+  relayed by hwloc_distances_get):
+  all four domains equidistant
+
+<span class="m">Measured</span> (4K pages, 1 thread,
+  random access, n=3):
+  local      <span class="m">101.5 ns</span>  44582 MB/s
+  near 0&lt;-&gt;1 <span class="m">107.9 ns</span>  43750 MB/s
+  mid  0&lt;-&gt;2 <span class="m">115.8 ns</span>  43219 MB/s
+  far  0&lt;-&gt;3 <span class="m">120.0 ns</span>  42397 MB/s
+
+<b>Margin</b>: 12.1 ns gap against a
+  1.2 ns floor (~10x). Two
+  independent tools rank all six
+  pairs identically.
+
+<b>What goes wrong if you trust the
+  declared value</b>: anything reading
+  numa_distance() treats these four
+  domains as interchangeable.</pre>
+      </div>
+    </div>
+
+    <p>
+      The second pane is not a better number. It is a different <em>kind</em> of object: a value, the
+      conditions it was taken under, the margin over the noise floor, the declared value it
+      contradicts, and the consequence of believing the declared one. That is what a reader &mdash;
+      human or model &mdash; needs to reason rather than recite.
+    </p>
+
+    <div class="note">
+      <p>
+        <b>And a category the declarative formats have no slot for at all.</b> Several of the most
+        useful costs are not scalars, they are curves. The page-size penalty on Frontier is zero
+        while the TLB covers the working set, peaks at <span class="num">2.4&times;</span> at 32&nbsp;MiB
+        <em>while the data is still in L3</em>, then settles to a roughly constant offset in DRAM. The
+        briefing carries it as a regime table with the mechanism attached &mdash; 8192 PTEs at 4K is
+        past TLB reach, so every access pays a page walk that itself goes to memory. There is no
+        single number to put in a topology file, which is precisely why nothing declares it. Four of
+        the Frontier facts are of this kind.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="rail">05 &mdash; Consumer</div>
+    <h2>Why the language model is the primary consumer, and not a gimmick</h2>
+    <p class="lead-in">
+      This is the part I most want to argue rather than assert. Useful advice needs
+      <b>machine &times; application</b>. The artifact holds only the machine half. The reason to
+      target a model is that it is the only consumer that <em>already holds the other half</em>
+      &mdash; the user hands it the source code.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 900 262" role="img" aria-label="Placement advice needs three inputs: static application properties which the model reads from source, machine cost which this artifact supplies, and runtime behaviour which only a runtime monitor such as ZeroSum can supply.">
+        <defs>
+          <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="dg-head" />
+          </marker>
+          <marker id="arw2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="dg-heada" />
+          </marker>
+        </defs>
+
+        <rect class="dg-box" x="16" y="16" width="256" height="88" />
+        <text class="dg-l" x="32" y="40">STATIC APP PROPERTIES</text>
+        <text class="dg-s" x="32" y="62">allocation sizes, message sizes,</text>
+        <text class="dg-s" x="32" y="78">halo exchanges, OpenMP structure</text>
+        <text class="dg-t" x="32" y="96">the model, from source</text>
+
+        <rect class="dg-acc" x="322" y="16" width="256" height="88" />
+        <text class="dg-l" x="338" y="40">MACHINE COST</text>
+        <text class="dg-s" x="338" y="62">tiers, curves, regime boundaries,</text>
+        <text class="dg-s" x="338" y="78">conditions, declared-vs-measured</text>
+        <text class="dg-a" x="338" y="96">this artifact &mdash; the part we build</text>
+
+        <rect class="dg-box" x="628" y="16" width="256" height="88" stroke-dasharray="5 4" />
+        <text class="dg-l" x="644" y="40">RUNTIME BEHAVIOUR</text>
+        <text class="dg-s" x="644" y="62">real working set, real message</text>
+        <text class="dg-s" x="644" y="78">distribution, co-tenant contention</text>
+        <text class="dg-t" x="644" y="96">ZeroSum &mdash; not inferable from source</text>
+
+        <path class="dg-line"  d="M 144 104 L 372 176" marker-end="url(#arw2)" />
+        <path class="dg-linea" d="M 450 104 L 450 176" marker-end="url(#arw2a)" />
+        <path class="dg-line"  d="M 756 104 L 528 176" marker-end="url(#arw2)" />
+
+        <rect class="dg-box" x="300" y="182" width="300" height="60" />
+        <text class="dg-t" x="318" y="207">a launch configuration</text>
+        <text class="dg-s" x="318" y="226">binding, page size, rank count, placement</text>
+      </svg>
+      <figcaption>
+        Two of the three legs already exist and belong to somebody else. We build the middle one, and
+        the third is a reason to collaborate rather than to widen scope.
+      </figcaption>
+    </figure>
+
+    <p>
+      That framing also settles three arguments about how the briefing gets written, and they are the
+      difference between a useful document and a confident wrong one.
+    </p>
+    <ul class="items">
+      <li>
+        <span class="hd">State cost structure, never conclusions.</span>
+        <span class="bd">
+          Writing "use <code>-c 56</code> for memory-bound codes" guesses at the application half and
+          will be wrong for some application. Give the fact and the condition under which it matters,
+          then stop.
+        </span>
+      </li>
+      <li>
+        <span class="hd">Put regime boundaries in units the reader can see in the code.</span>
+        <span class="bd">
+          "Peaks at 32&nbsp;MiB" is only actionable if the model can match it against an allocation it
+          can actually see; "12&ndash;14% penalty below 64&nbsp;KB" is matchable against a real
+          <code>MPI_Send</code>. Abstract phrasing breaks the match.
+        </span>
+      </li>
+      <li>
+        <span class="hd">Give the mechanism alongside every number.</span>
+        <span class="bd">
+          The bridge from machine fact to application property is where hallucination lives &mdash;
+          not in the measurements. "2.4&times; at 32&nbsp;MiB" invites pattern-matching; the page-walk
+          explanation lets a model correctly decide the penalty does <em>not</em> apply to a streaming
+          code.
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="rail">06 &mdash; Discipline</div>
+    <h2>What keeps it from being a confident-sounding hallucination</h2>
+    <p class="lead-in">
+      A briefing reads as authoritative whether or not the probes behind it ran. So the trust
+      machinery is in the schema, not in the prose.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Mechanism</th><th>The failure it exists to prevent</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>probe_validated</code>, separate from the verdict</td>
+            <td>A probe that silently failed to run produces output indistinguishable from one that confirmed. The checker refuses a positive verdict on an unvalidated probe. Three Frontier experiments returned clean, plausible, wrong nulls before this existed.</td>
+          </tr>
+          <tr>
+            <td><code>unsuitable_probes</code>, with a stated reason</td>
+            <td>The wrong instrument manufactures a false confirmation. Host&harr;device <em>bandwidth</em> is flat to 0.1% across every pair on Frontier, so verifying GPU affinity with it returns "affinity doesn't matter."</td>
+          </tr>
+          <tr>
+            <td><code>confirmed</code> is a result, not a non-event</td>
+            <td>Without the control there is no finding, only complaining. The XGMI weight table being <em>accurate</em> is what turns "firmware is unreliable" into "the same vendor describes its GPU interconnect correctly and its CPU interconnect not at all, on one node."</td>
+          </tr>
+          <tr>
+            <td>Graded confidence, and a separate <em>Leads</em> section</td>
+            <td>Real characterization produces patterns that look like structure and sit inside the noise band. Dropping them loses a lead; promoting them makes a claim the data won't support. They render under an explicit instruction not to build on them.</td>
+          </tr>
+          <tr>
+            <td>Four reasoning rules carried into the briefing itself</td>
+            <td>Don't upgrade a hedge; conditions travel with every number; regime-dependent costs get answered with the regime rather than an average; say when a question isn't covered.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Cost of all this, in practice: the Frontier briefing renders to about <span class="num">430</span>
+      lines, roughly <span class="num">5.7k</span> tokens. That fits inside a working session alongside
+      real code, which is the only budget that matters.
+    </p>
+  </section>
+
+  <section>
+    <div class="rail">07 &mdash; Scale</div>
+    <h2>Two machines in: the same table, wrong in two different ways</h2>
+    <p class="lead-in">
+      corsys4 &mdash; the Cascade Lake + Optane box in the lab &mdash; went through the identical
+      registry with no changes to the questions and none to the renderer. That was the portability
+      test, and it also produced the second data point.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th></th><th>Frontier</th><th>corsys4</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Vendor</td><td>AMD EPYC 7A53</td><td>Intel Xeon Gold 6246R</td></tr>
+          <tr><td>Memory</td><td>DDR4, four domains</td><td>DDR4 + Optane PMEM, cpuless node</td></tr>
+          <tr><td>SLIT declares</td><td class="num">1.200&times; for every remote hop</td><td class="num">1.700&times;</td></tr>
+          <tr><td>Measured</td><td class="num">1.063 &ndash; 1.182&times;, three tiers</td><td class="num">2.350&times; lat / 2.866&times; bw</td></tr>
+          <tr><td>How it fails</td><td>erases structure</td><td>scalar is simply wrong</td></tr>
+          <tr><td>Directional asymmetry</td><td class="num">3.9 ns at 1 thread (3.3&times; noise)</td><td class="num">3.46&times; at 16 threads &mdash; <em>inverts</em> to 0.83&times; at one</td></tr>
+          <tr><td>Declaration fidelity</td><td class="num">40% (4 of 10)</td><td class="num">50% (3 of 6)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The tempting claim &mdash; both firmwares understate crossing cost &mdash; is false, and I
+      checked before writing it down. Frontier's declared 1.200&times; actually <em>exceeds</em> every
+      measured hop; its failure is that it flattens three tiers into one number. corsys4 has only two
+      nodes, so there is no structure to erase, and its scalar is just wrong by 38&ndash;69%.
+      <b>Two machines, two distinct failure modes, one data model.</b> That is the stronger result:
+      neither is a calibration error that better firmware numbers would fix, because one scalar per
+      pair cannot hold tiers, direction, or two metrics that disagree with each other by 22%. On
+      corsys4 it cannot even hold a <em>fixed</em> direction: the asymmetry reverses between one
+      thread and sixteen, because Optane writes barely scale while the read path scales well. No
+      single value is right at both thread counts.
+    </p>
+    <ul class="items">
+      <li class="key">
+        <span class="hd">The registry moved unchanged, and the empty slots behaved as designed.</span>
+        <span class="bd">
+          Six of the fifteen claims have no referent on a machine with no accelerator and no fabric.
+          They record as <code>not_applicable</code> with a reason rather than as failures, and they
+          drop out of the fidelity score &mdash; a vendor is neither right nor wrong about hardware
+          that isn't there. That verdict was on the "needs a second machine to justify" list; corsys4
+          justified it.
+        </span>
+      </li>
+      <li class="key">
+        <span class="hd">And the second machine found a hole in the question list.</span>
+        <span class="bd">
+          corsys4's most useful measurement is the cross-tier copy matrix, and the registry has no
+          claim for it &mdash; on Frontier that cost lives under host-to-device transfer, which is
+          the same physical question wearing a GPU-shaped name. It is currently carried as a
+          substitute probe under NUMA symmetry, which works but is not where it belongs. This is the
+          portability test doing exactly what it is for.
+        </span>
+      </li>
+      <li>
+        <span class="hd">The next two targets span the whole design space of where memory sits.</span>
+        <span class="bd">
+          Frontier is a discrete GPU with separate host DDR and explicit copies. LLNL's Tuolumne
+          (MI300A) is an APU where CPU and GPU share HBM and the host&harr;device transfer largely
+          stops existing &mdash; on that machine the claim isn't untested, it's <em>meaningless</em>,
+          and saying so is itself the result. Aurora pairs Intel GPUs with CPU-side HBM alongside DDR.
+        </span>
+      </li>
+      <li>
+        <span class="hd">A cross-machine fidelity table is a dataset that stands on its own.</span>
+        <span class="bd">
+          "Frontier declares ten cost-bearing facts and four survive measurement" is an anecdote. The
+          same profile across three leadership machines is a finding about how the whole ecosystem
+          describes itself, and it is the kind of thing facilities will read.
+        </span>
+      </li>
+      <li>
+        <span class="hd">The schema cannot be finalized from one machine.</span>
+        <span class="bd">
+          Right now the declared and measured blocks are free-form, so the renderer formats them
+          generically. Constraining those shapes is the main next version, and doing it against
+          Frontier alone would just encode Frontier. Tonight gave the first hard evidence: the
+          renderer crashed twice on the new machine, both times because a block was hand-written
+          with a field name the first machine happened not to use. Free-form is not a stylistic
+          problem, it is a correctness one.
+        </span>
+      </li>
+      <li>
+        <span class="hd">Diff mode is nearly free if designed in now.</span>
+        <span class="bd">
+          Same machine, two dates: did the firmware update move the tiers? That is the question
+          facility staff will care about most, and it is awkward to bolt on later.
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="rail">08 &mdash; Test</div>
+    <h2>How we would know it works &mdash; one experiment</h2>
+    <p class="lead-in">
+      Everything above is machinery. One experiment decides whether it is a paper, and the control has
+      to hold the application half too, otherwise it beats a strawman with no context.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Arm</th><th>Input to the same model</th></tr></thead>
+        <tbody>
+          <tr><td>control</td><td>the source code + vendor documentation and hwloc</td></tr>
+          <tr><td>treatment</td><td>the source code + the measured briefing</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Same model, same source, one variable. Ask each arm for a launch configuration, run both,
+      compare wall clock. Inputs are codes already built and validated here &mdash; QMCPACK, plus AMG,
+      LULESH and GAPBS from the profiler work &mdash; so no hand-built application profiles are needed.
+    </p>
+    <div class="note">
+      <p>
+        <b>The gap is already documented by someone else, which is the strongest part of the pitch.</b>
+        ZeroSum (Huck &amp; Malony, SC-W 2023) monitors a running job's placement at under 0.5%
+        overhead and lays out six phases for such a tool. Phase 2 &mdash; evaluate the configuration to
+        detect misconfiguration &mdash; is the one they explicitly did not build, and they say why: it
+        "would require a comparison to a known 'good' configuration for this platform." That reference
+        configuration is exactly what this produces. They also supply the template for what a win looks
+        like: on this machine, adding <code>-c 7</code> to an <code>srun</code> line took miniQMC from
+        63.67&nbsp;s to 27.33&nbsp;s &mdash; same code, same node, a configuration fact the user had no
+        way to know.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="rail">09 &mdash; Knobs</div>
+    <h2>Every knob that spreads an application across a node, and who can tell you about it</h2>
+    <p class="lead-in">
+      Here is the test I want to hold the descriptor to. Take an application nobody has characterized,
+      put it on a Frontier node or a handful of them, and write the launch line. Every decision below
+      is one somebody has to make &mdash; an <code>srun</code> flag, an environment variable, a module,
+      or a sizing choice in the code itself. For each one: can the machine's own declared sources
+      answer it, can this artifact, and is that answer in hand today.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:26%">What is being decided</th>
+            <th style="width:29%">Can hwloc and the declared sources answer it</th>
+            <th style="width:33%">Can this artifact answer it</th>
+            <th style="width:12%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="kn">Cache blocking / tile size</td>
+            <td class="v"><span class="v-yes"></span>Yes. L1/L2/L3 sizes are reported and correct.</td>
+            <td class="v">Confirms it, and adds measured latency per level &mdash; 1.1 / 3.4 / 10.9&ndash;13.3 ns &mdash; so a tile size can be priced, not just fitted.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Which GPUs to pair for peer transfers</td>
+            <td class="v"><span class="v-yes"></span>Yes. The XGMI weight table is accurate.</td>
+            <td class="v">Confirms it. This row is the control &mdash; the same vendor describes its GPU fabric correctly and its CPU fabric not at all.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Cores per rank &mdash; <code>-c</code></td>
+            <td class="v"><span class="v-part"></span>Right mechanism (allowed cpuset), but the vendor diagram says 64 and a user reading it is wrong.</td>
+            <td class="v">56 usable, one core per L3 group reserved. At 56 each NUMA domain gets exactly 14 cores; at 64 nothing divides.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Rank and thread placement across NUMA &mdash; <code>--cpu-bind</code>, <code>--distribution</code></td>
+            <td class="v"><span class="v-no"></span>Structure yes, cost no. The SLIT calls all four domains equidistant, and nothing signals otherwise.</td>
+            <td class="v">Three measured tiers &mdash; 107.9 / 115.8 / 120.0 ns against a 101.5 ns local &mdash; plus a directional asymmetry a scalar cannot hold.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Where hot data goes &mdash; <code>--mem-bind</code>, <code>numactl</code></td>
+            <td class="v"><span class="v-no"></span>Same flat distance table. On corsys4 it also reports two NUMA nodes as if they were peers.</td>
+            <td class="v">Same tiers, and it records that corsys4's second node is cpuless Optane &mdash; so "balance across NUMA" silently lands hot pages on the slow tier.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Page size &mdash; whether to load <code>craype-hugepages2M</code></td>
+            <td class="v"><span class="v-none"></span>No slot for it anywhere. Worse, <code>madvise</code> and the THP setting both report success while delivering 4K.</td>
+            <td class="v">Required, verified through smaps, and it works by <em>relinking the binary</em> &mdash; a build-time decision. Once linked, the allocator aborts under a remote <code>numactl -m</code>.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Threads for a memory-bound phase &mdash; <code>OMP_NUM_THREADS</code></td>
+            <td class="v"><span class="v-none"></span>No slot. Nothing declares where added threads stop buying throughput.</td>
+            <td class="v">The loaded-latency knee: 98.3% of peak bandwidth is available far below saturation. Read-only so far &mdash; the read/write mix is the gap.</td>
+            <td><span class="st st-part">Partial</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Allocation sizes where TLB reach fails</td>
+            <td class="v"><span class="v-none"></span>No slot. This is a curve, and the declarative formats hold scalars only.</td>
+            <td class="v">Page-size penalty as a regime table &mdash; peaks at 2.4&times; at 32 MiB while data is still L3-resident &mdash; with the page-walk mechanism attached.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Host or device buffers for MPI; message aggregation</td>
+            <td class="v"><span class="v-none"></span>No slot.</td>
+            <td class="v">Crossovers in code-visible units: device buffers win above 16 KB on bandwidth, 256 KB on latency, and hold +5.5% at 4 MiB.</td>
+            <td><span class="st st-in">In</span></td>
+          </tr>
+          <tr>
+            <td class="kn">GPU binding &mdash; <code>--gpu-bind=closest</code></td>
+            <td class="v"><span class="v-part"></span>Device locality is the right mechanism, and the map is non-naive &mdash; NUMA 0 pairs with GCD 4 and 5, not 0 and 1.</td>
+            <td class="v">Carries the declared map but has not verified it. It does establish that <em>bandwidth cannot</em> verify it: 25.27 GB/s &plusmn; 0.02 across every combination.</td>
+            <td><span class="st st-open">Open</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Ranks per node for communication &mdash; <code>MPICH_OFI_NIC_POLICY</code></td>
+            <td class="v"><span class="v-part"></span>Lists four NICs and their locality. Structure only &mdash; nothing says what a rank actually gets.</td>
+            <td class="v">23.9 GB/s per link measured, about 96% of one link on a node rated 100. The four-pair aggregate is not yet run, so this is ambiguous by up to 4&times;.</td>
+            <td><span class="st st-part">Partial</span></td>
+          </tr>
+          <tr>
+            <td class="kn">How many nodes, and whether any of it generalizes &mdash; <code>-N</code></td>
+            <td class="v"><span class="v-none"></span>Per-node discovery by design. It makes no cross-node claim and cannot.</td>
+            <td class="v">Not yet. The topology results come from effectively one node, and a user does not get to pick their nodes.</td>
+            <td><span class="st st-open">Open</span></td>
+          </tr>
+          <tr>
+            <td class="kn">Any of the above on a node that is already busy</td>
+            <td class="v"><span class="v-none"></span>No slot. Discovery reflects the calling process, not its neighbours.</td>
+            <td class="v">Recorded as confounded rather than reported &mdash; the load generator consumed cores as well as bandwidth. One finding survived: GPU-direct degrades 75% against host transfers' 50%.</td>
+            <td><span class="st st-open">Open</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="legend">
+      <span>&#10003;&nbsp; answers it correctly</span>
+      <span>&#126;&nbsp; partly, or by the right mechanism unverified</span>
+      <span>&#10007;&nbsp; answers it, incorrectly</span>
+      <span>&#8212;&nbsp; no slot for the question</span>
+    </p>
+
+    <p>
+      Read down the second column and the argument makes itself. Of thirteen decisions, the declared
+      sources answer <span class="num">2</span> correctly &mdash; and we confirm both, which is the
+      control, because without it this is complaining rather than a finding. <span class="num">3</span>
+      more use the right mechanism but hand a user the wrong number or an unverified one.
+      <span class="num">2</span> are answered confidently and incorrectly, which is the dangerous
+      case, because nothing in the interface signals it. And for <span class="num">6</span> there is
+      no slot for the question at all &mdash; not a defect in hwloc, which is a topology library and
+      was never a performance model.
+    </p>
+
+    <div class="note">
+      <p>
+        <b>Three rows are open and two are partial, and I want to be plain about which.</b> The GPU
+        binding map is the one that changes a launch line most and it is still taken on faith &mdash;
+        one short allocation with the right probe closes it. The NIC row needs a two-node allocation
+        that is already scripted. Node-to-node variance is the one a reviewer will reach for first,
+        because a descriptor that only holds for the node it was measured on cannot configure
+        anything. None of the five is hard; all five are scheduling.
+      </p>
+      <p>
+        The row I would point at to argue the format earns its keep is page size. Huge pages on
+        Frontier need <code>craype-hugepages2M</code>, it works by <em>relinking the binary</em>
+        rather than any runtime flag, and once linked the allocator aborts under a remote
+        <code>numactl -m</code>. No declarative source carries any of that, both facts are
+        load-bearing before the job is ever submitted, and a user who does not know them gets
+        plausible wrong numbers rather than an error.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="rail">10 &mdash; Scope</div>
+    <h2>Deliberately not building</h2>
+    <p class="lead-in">
+      Recorded so it stays decided, and so the scope question doesn't reopen every time.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Not building</th><th>Because</th></tr></thead>
+        <tbody>
+          <tr><td>A C API</td><td>mpibind, MPI, Slurm and ZeroSum already read hwloc. Annotated XML reaches all of them with no code on either side.</td></tr>
+          <tr><td>An interactive topology GUI</td><td>The content is matrices, curves and verdicts &mdash; none of it tree-shaped. <code>lstopo</code> already does trees well.</td></tr>
+          <tr><td>An <code>advise</code> CLI</td><td>It could only work from an application profile the user asserts. The model derives one from source.</td></tr>
+          <tr><td>A web service or dashboard</td><td>Wrong for machines behind two-factor with no outbound network, and it turns the artifact into something to operate.</td></tr>
+          <tr><td>MCP as the primary channel</td><td>A server fails precisely where this is aimed: remote machine, no outbound network, agent on the laptop. A thin optional wrapper later.</td></tr>
+          <tr><td>Collectives tuning and rank-mapping algorithms</td><td>Deciding which rank lands on which node, and which collective algorithm to pick, is where domain scientists genuinely lose time &mdash; and it needs a communication graph the artifact does not hold. The per-link and per-node costs it does measure are an <em>input</em> to that problem, not a solution to it. Stated as an exclusion rather than left as an oversight.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr />
+  <footer>
+    Every excerpt is real output. numactl from results-frontier/topo.txt &middot; briefing from
+    render.py over machines/frontier-compute.json &middot; artifact record from machines/corsys4.json,
+    built 2026-08-06 from mlc/results/ plus two ptrchase curves run the same night &middot;
+    schema 0.1, registry 0.2
+  </footer>
+
+</div>
+
+</body>
+</html>

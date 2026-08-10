@@ -1,0 +1,9 @@
+# Runtime droppings from site/serve.py
+site/server.pid
+site/server.log
+
+# Stale renderer traceback; regenerate by redirecting stderr if needed
+render.err
+
+__pycache__/
+*.pyc

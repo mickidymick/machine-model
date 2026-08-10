@@ -1,0 +1,53 @@
+{
+  "eval_version": "0.1",
+  "machine": "frontier-compute",
+  "app": "QMCPACK",
+  "purpose": "Experiment B: does the measured artifact change the CONFIGURATION a model proposes, and is the changed configuration faster? Scored by wall clock, not by opinion.",
+
+  "app_context": {
+    "code": "QMCPACK, built from source on Frontier with ROCm 6.3.1 / HIP, GPU offload targeting gfx90a (build_olcf_frontier_ROCm.sh, gpu_real variant only).",
+    "benchmark": "Diamond primitive cell VMC, 2 C atoms, 8 electrons, 1000 blocks.",
+    "structure": "MPI + OpenMP with GPU target offload. Walkers are distributed across ranks; each rank runs an OpenMP team and offloads to one GCD. Walker count scales with total threads, so throughput depends on getting ranks, threads and GCDs all engaged.",
+    "known_baseline": "1 rank / 16 walkers took 155.8 s. 8 ranks / 112 walkers took 68.0 s on the same node -- 7x the sampling in 44% of the time, because the single-rank run was starved twice over (one OpenMP thread, one of eight GCDs).",
+    "note": "The baseline is given to BOTH arms. It is a fact about the application, not about the machine, and withholding it would test the wrong variable."
+  },
+
+  "output_format": "For each scenario give: the complete srun command line, any environment variables that matter, and one sentence per choice explaining why. Be concrete -- exact numbers, not 'tune this'.",
+
+  "scenarios": [
+    {
+      "id": "s1",
+      "name": "Whole node, maximum throughput",
+      "prompt": "You have one whole Frontier compute node for a 30-minute job. Configure QMCPACK to get the most sampling done. Give the exact srun line and environment variables.",
+      "what_it_tests": "Does the arm know there are 8 schedulable GCDs rather than 4 packages, and that 56 cores is the ceiling rather than 64? A 4-rank answer idles half the accelerator; a -c 64 answer is rejected by the scheduler outright.",
+      "failure_mode_if_declared_only": "4 ranks (one per MI250X package) and/or -c 8 derived from 64/8."
+    },
+    {
+      "id": "s2",
+      "name": "Four GCDs only",
+      "prompt": "A node-sharing policy limits you to 4 of the 8 GCDs on one node. Which 4 would you pick, how many ranks, and how do you bind them? Give the exact srun line.",
+      "what_it_tests": "Whether the arm reasons about which GCDs, using the non-naive NUMA<->GCD map, versus picking 0-3 by index. Also whether it flags that the affinity map is declared but unverified.",
+      "failure_mode_if_declared_only": "Picks GCD 0-3 by index with no reference to NUMA locality, or asserts a locality claim with unwarranted confidence."
+    },
+    {
+      "id": "s3",
+      "name": "One NUMA domain",
+      "prompt": "You are restricted to a single NUMA domain and its local GPUs. Configure QMCPACK. How many cores and which GCDs do you get, and what does that cost you relative to the whole node?",
+      "what_it_tests": "Core arithmetic under reservation (56/4 = 14 usable, not 64/4 = 16) and whether the arm connects the domain to the right GCD pair.",
+      "failure_mode_if_declared_only": "16 cores per domain; GCD pairing by naive index."
+    },
+    {
+      "id": "s4",
+      "name": "Memory-bound preprocessing phase",
+      "prompt": "Before the VMC run there is a host-side preprocessing phase that is memory-bandwidth bound, single node, CPU only, with a working set around 32 MiB per thread. How should it be configured, and is there anything about this machine that would surprise someone tuning it?",
+      "what_it_tests": "Two measurement-only facts: the 32 MiB working set sits exactly at the worst point of the 4K-page penalty (2.4x, while still in L3), and saturating bandwidth costs 2.7x in latency for 1.7% of throughput. Neither is declared anywhere.",
+      "failure_mode_if_declared_only": "Generic advice -- 'use all cores, bind memory locally' -- with no mention of page size or the operating point."
+    }
+  ],
+
+  "scoring": {
+    "primary": "Wall clock of the proposed configuration, run on Frontier. Two passes per configuration.",
+    "secondary": "Whether the configuration is even valid -- a rejected srun line is a result.",
+    "note": "If both arms propose the same configuration for a scenario, that is a real finding and should be reported, not discarded. It means the declared information was sufficient there."
+  }
+}

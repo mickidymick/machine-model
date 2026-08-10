@@ -1,0 +1,141 @@
+{
+  "eval_version": "0.1",
+  "machine": "frontier-compute",
+  "purpose": "Does a model reason better about this machine when given measured cost instead of only what the machine declares? Both arms are generated from the same descriptor, so the single difference between them is measurement.",
+
+  "method": {
+    "control_arm": "prompts/frontier-declared.md -- ACPI SLIT, hwloc, rocm-smi, vendor diagram, facility notes. What any user on the machine can obtain without measuring.",
+    "treatment_arm": "prompts/frontier-compute.md -- the measured briefing.",
+    "steelman": "The control is additionally given the operational notes, several of which were in fact discovered by measurement rather than documented by the facility. That is more than a real user would have, and it biases AGAINST the treatment arm. A win under those conditions is a conservative win.",
+    "limitation": "Answers for this preliminary run were produced by one model with the two contexts kept separate, not by independent blinded sessions across several models. Good enough to show a shape; not a study."
+  },
+
+  "categories": {
+    "docs_sufficient": "The declaration is correct and complete. Both arms should be right. These exist so the result is not 'measurement wins everywhere', which would suggest a rigged control.",
+    "docs_misleading": "The declaration is wrong or induces a wrong decision. The control is expected to be CONFIDENTLY WRONG -- not ignorant. This is the category that matters.",
+    "measurement_only": "Nothing on the machine reports this. The control can only hedge or guess; asserting a specific answer is a failure.",
+    "honesty": "Neither arm has a verified answer. The correct behaviour is to decline or flag it as unverified. Tests whether the briefing's hedges survive contact with a question."
+  },
+
+  "scoring": {
+    "correct": "Matches ground truth, appropriately stated.",
+    "hedged": "Declines or flags uncertainty where the arm genuinely cannot know. Correct behaviour, not a failure.",
+    "wrong": "Incorrect, but stated tentatively.",
+    "confidently_wrong": "Incorrect and stated as fact, with no hedge. The most damaging outcome: it is what a user acts on."
+  },
+
+  "questions": [
+    {
+      "id": "q01",
+      "category": "docs_misleading",
+      "q": "How many CPU cores can a job actually use on one compute node? What is the maximum valid value of srun -c?",
+      "truth": "56, not 64. One core per L3 group is OS-reserved (0,8,16,24,32,40,48,56). `-c 56` is the ceiling; higher is rejected.",
+      "declared_says": "The node diagram shows 64 cores.",
+      "claim": "cpu.core_inventory"
+    },
+    {
+      "id": "q02",
+      "category": "docs_misleading",
+      "q": "Rank the six NUMA domain pairs (0-1, 0-2, 0-3, 1-2, 1-3, 2-3) by the cost of crossing between them, cheapest first. If they are equivalent, say so.",
+      "truth": "Three tiers, not equivalent. near: 0-1 (107.9ns), 2-3 (108.9); mid: 0-2 (115.8), 1-3 (116.1); far: 1-2 (119.2), 0-3 (120.0). Near-to-far gap is ~10x the 1.2ns noise floor, and a bandwidth tool ranks all six identically.",
+      "declared_says": "The ACPI SLIT gives every remote pair distance 12 -- all four domains mutually equidistant.",
+      "claim": "numa.distance_matrix"
+    },
+    {
+      "id": "q03",
+      "category": "docs_misleading",
+      "q": "Is the cost of crossing between two NUMA domains the same in both directions?",
+      "truth": "No. 2->3 is 110.8ns and 3->2 is 106.9ns; bandwidth agrees on the direction (43662 vs 44263 MB/s). A scalar distance cannot express this at all.",
+      "declared_says": "The distance matrix is symmetric by construction -- one value per pair.",
+      "claim": "numa.symmetry"
+    },
+    {
+      "id": "q04",
+      "category": "docs_misleading",
+      "q": "How many GPU devices can be scheduled per node, and how many ranks should a rank-per-GPU job launch?",
+      "truth": "8 schedulable GCDs, not 4 packages. Each MI250X exposes two Graphics Compute Dies and the GCD is what ROCm and Slurm schedule. A 4-rank job idles half the accelerator.",
+      "declared_says": "The node diagram shows 4x MI250X.",
+      "claim": "gpu.device_inventory"
+    },
+    {
+      "id": "q05",
+      "category": "docs_misleading",
+      "q": "A single rank per node achieves about 24 GB/s to another node. The node is specified at 100 GB/s injection. Is something wrong?",
+      "truth": "Nothing is wrong. The node has four Slingshot NICs and one rank crosses one of them; 23.9 GB/s is ~96% of a single ~25 GB/s link. To use the node's full injection you need concurrent pairs across NICs (osu_mbw_mr, MPICH_OFI_NIC_POLICY=NUMA).",
+      "declared_says": "Facility spec: 100 GB/s injection per node.",
+      "claim": "net.nic_inventory"
+    },
+    {
+      "id": "q06",
+      "category": "docs_sufficient",
+      "q": "Which GCDs are physically nearest to NUMA domain 3?",
+      "truth": "GCD 0 and 1. The map is non-intuitive: NUMA 0->GCD 4,5; NUMA 1->GCD 2,3; NUMA 2->GCD 6,7; NUMA 3->GCD 0,1.",
+      "declared_says": "rocm-smi --showtoponuma reports this correctly.",
+      "claim": "gpu.numa_affinity"
+    },
+    {
+      "id": "q07",
+      "category": "docs_sufficient",
+      "q": "What are the L1, L2 and L3 cache sizes, and what is the L3 sharing scope?",
+      "truth": "L1 32KB, L2 512KB, L3 32MB per CCD. Measured latencies 1.1 / 3.4 / 10.9-13.3 ns confirm the declared sizes.",
+      "declared_says": "hwloc and lscpu report these correctly.",
+      "claim": "cpu.cache_hierarchy"
+    },
+    {
+      "id": "q08",
+      "category": "docs_sufficient",
+      "q": "I called madvise(MADV_HUGEPAGE) and it returned success. Do I have huge pages?",
+      "truth": "No. THP is [never] and the hugetlb pool is empty (Total 4, Free 0); both normal paths fail silently. craype-hugepages2M is required and works by relinking, not a runtime flag. Verify via smaps.",
+      "declared_says": "Documented as an operational note (given to both arms).",
+      "claim": "mem.page_backing"
+    },
+    {
+      "id": "q09",
+      "category": "measurement_only",
+      "q": "My working set is 32 MiB and fits in L3. Does page size matter for a random-access pattern?",
+      "truth": "Yes, badly -- 2.4x. 13.3ns on huge pages vs 32.2ns on 4K. 32 MiB needs 8192 PTEs at 4K, far past TLB reach, so every access pays a page walk that itself goes to memory. This is the WORST point on the curve: the penalty is zero below 256KB and settles to ~9-14ns beyond 64MB.",
+      "declared_says": "Nothing reports this.",
+      "claim": "cost.page_size_penalty"
+    },
+    {
+      "id": "q10",
+      "category": "measurement_only",
+      "q": "Should I tune my code to saturate memory bandwidth on this node?",
+      "truth": "No. 98.3% of peak bandwidth is available at 2.7x lower latency. Peak is 44521 MB/s at 832ns; the knee is 43752 MB/s at 234ns. Saturating costs a factor of 2.7 in latency for 1.7% of throughput.",
+      "declared_says": "Nothing reports this.",
+      "claim": "cost.loaded_latency_knee"
+    },
+    {
+      "id": "q11",
+      "category": "measurement_only",
+      "q": "For inter-node MPI, should I send from GPU device buffers or stage through host memory? Does the answer depend on message size?",
+      "truth": "It depends on size and changes sign. Device buffers are 5.5% faster at 4 MiB but 12-14% WORSE below 64KB. Bandwidth crosses over at 16KB, latency not until 256KB. Bulk collectives: device. Small halo exchanges: host.",
+      "declared_says": "Nothing reports this.",
+      "claim": "cost.host_device_transfer"
+    },
+    {
+      "id": "q12",
+      "category": "measurement_only",
+      "q": "I have a 16 KB halo exchange between neighbouring ranks on different nodes. Device buffers or host?",
+      "truth": "Host. At 16KB you are below the 256KB latency crossover, where device buffers are 12-14% worse. The bandwidth crossover at 16KB does not help a ping-pong pattern, which pays the fixed per-message cost every round trip rather than amortising it.",
+      "declared_says": "Nothing reports this.",
+      "claim": "cost.host_device_transfer"
+    },
+    {
+      "id": "q13",
+      "category": "honesty",
+      "q": "I want to place a host buffer for GCD 0 to read. Which NUMA domain should it go on, and how confident are you?",
+      "truth": "NUMA 3 is DECLARED nearest by rocm-smi, but this is UNVERIFIED by measurement on this machine. Both probes attempted failed to discriminate: host<->device bandwidth is flat to 0.1% across every pair, and the latency arm used unbound host allocation so the domain was uncontrolled. The correct answer states the declared map AND flags that it has not been confirmed.",
+      "declared_says": "rocm-smi reports NUMA 3 -> GCD 0,1, with no indication of confidence.",
+      "claim": "gpu.numa_affinity"
+    },
+    {
+      "id": "q14",
+      "category": "honesty",
+      "q": "Does write-heavy traffic saturate memory bandwidth the same way read traffic does on this node?",
+      "truth": "Unknown here. The loaded-latency sweep is read-only; read/write mix was not measured. The correct answer says so rather than extrapolating from the read curve.",
+      "declared_says": "Nothing reports this.",
+      "claim": "cost.loaded_latency_knee"
+    }
+  ]
+}

@@ -1,0 +1,430 @@
+{
+  "registry_version": "0.2",
+  "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
+  "verdicts": {
+    "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
+    "contradicted": "Probe disagrees with the declaration by more than the stated margin.",
+    "misleading": "The declared value is technically correct but reliably induces a wrong decision, usually because a condition is unstated.",
+    "undeclared": "Nothing on the machine reports this. Measurement is the only source.",
+    "untested": "In the registry, no probe run yet on this machine.",
+    "unfalsifiable_here": "A probe ran but cannot discriminate on this machine (e.g. the metric is flat). Not the same as confirmed -- record which probe failed to discriminate and why.",
+    "not_applicable": "The claim has no referent on this machine -- the hardware or software it asks about is absent. Distinct from `untested` (could be answered, has not been) and from `unfalsifiable_here` (a probe ran but cannot discriminate). Excluded from declaration fidelity: a vendor is neither right nor wrong about a thing that is not there. Requires a `reason`, because the reason is often itself the result."
+  },
+  "probe_validated": {
+    "description": "Did the probe actually manipulate the variable it claims to manipulate? A probe that silently failed to run produces output indistinguishable from a confirmation. This field is separate from `verdict` and must be checked first.",
+    "values": [
+      "yes",
+      "no",
+      "not_applicable"
+    ]
+  },
+  "claims": [
+    {
+      "id": "cpu.cache_hierarchy",
+      "domain": "cpu",
+      "declares": "Number, size and sharing scope of cache levels.",
+      "declared_source": {
+        "primary": "hwloc topology tree",
+        "fallback": "lscpu, /sys/devices/system/cpu/cpu0/cache"
+      },
+      "why_it_matters": "Sets the working-set targets for blocking and tiling. Also the calibration check for the latency tool itself.",
+      "probe": {
+        "id": "cache-curve",
+        "tool": "bin/ptrchase --curve --hugepages",
+        "rationale": "A random pointer chase across increasing buffer sizes shows a plateau per level. Must be huge-paged, or TLB misses are misread as cache misses -- see cost.page_size_penalty, which is the same measurement with the confound left in.",
+        "passes": 3,
+        "conditions": {
+          "pages": "huge",
+          "threads": 1,
+          "access": "random"
+        },
+        "self_check": "Reported `pages:` line says hugetlb or THP, not 4K. Verify via smaps, not madvise return.",
+        "unsuitable_probes": [
+          {
+            "probe": "streaming bandwidth sweep",
+            "reason": "Sequential access prefetches across level boundaries and blurs the plateaus."
+          }
+        ]
+      },
+      "verdict_rule": "confirmed if each measured plateau boundary lands within one sweep step of the declared size.",
+      "consequence_if_wrong": "Blocking parameters tuned to a cache that is not the size claimed.",
+      "portability": "Universal. Applies unchanged on all targets."
+    },
+    {
+      "id": "cpu.core_inventory",
+      "domain": "cpu",
+      "declares": "How many cores/hardware threads the job may actually use, versus how many the node physically has.",
+      "declared_source": {
+        "primary": "hwloc allowed cpuset",
+        "fallback": "vendor node diagram, nproc, /proc/self/status Cpus_allowed_list"
+      },
+      "why_it_matters": "Directly sets `-c` / ranks per node. Getting it wrong either wastes allocation or gets the job rejected.",
+      "probe": {
+        "id": "allowed-set",
+        "tool": "scripts/00_topo.sh (Cpus_allowed_list) plus an oversubscription attempt",
+        "rationale": "Read the allowed mask from inside a real allocation, then attempt to exceed it. The mask alone can be right while the documentation is wrong; the rejection is what proves the ceiling.",
+        "passes": 1,
+        "conditions": {
+          "context": "inside srun allocation, not login node"
+        },
+        "self_check": "Confirm the reading came from a compute node -- login nodes may be a different part entirely.",
+        "unsuitable_probes": [
+          {
+            "probe": "reading hwloc on a login node",
+            "reason": "Login and compute node types differ on at least one target machine."
+          }
+        ]
+      },
+      "verdict_rule": "misleading if the allowed set is smaller than the count a user would take from the node diagram or nproc.",
+      "consequence_if_wrong": "Wasted cores, or a launch line the scheduler rejects.",
+      "portability": "Universal. The *reason* for reservation is machine-specific; the check is not."
+    },
+    {
+      "id": "numa.domain_count",
+      "domain": "numa",
+      "declares": "Number of NUMA domains and which cores and memory belong to each.",
+      "declared_source": {
+        "primary": "hwloc NUMA nodes",
+        "fallback": "numactl -H"
+      },
+      "why_it_matters": "The unit of memory placement. Everything downstream assumes it.",
+      "probe": {
+        "id": "matrix-diagonal",
+        "tool": "bin/ptrchase + bin/bwmatrix, full N x N",
+        "rationale": "If the declared partition is real, the diagonal is uniformly fastest and local behaviour is equivalent across domains. Non-uniform diagonals mean the declared domains are not peers.",
+        "passes": 3,
+        "conditions": {
+          "binding": "numactl -N <cpu> -m <mem>, never first touch"
+        },
+        "self_check": "On a cpuless or remote domain, first touch silently lands local and reports a plausible wrong number. Confirm the binding took.",
+        "unsuitable_probes": []
+      },
+      "verdict_rule": "confirmed if all diagonal entries agree within the noise floor.",
+      "consequence_if_wrong": "Placement policy operating on a partition that does not describe the hardware.",
+      "portability": "Universal. Count and shape vary (NPS4, APU-unified, HBM+DDR tiers); the check does not."
+    },
+    {
+      "id": "numa.distance_matrix",
+      "domain": "numa",
+      "declares": "Relative cost of crossing between NUMA domains.",
+      "declared_source": {
+        "primary": "hwloc_distances_get",
+        "fallback": "ACPI SLIT via numactl -H",
+        "note": "On x86 hwloc relays the SLIT. This claim is the one case where the artifact's primary structural input is also the carrier of the error it exists to correct. Declared values are quarantined in `declared` and never promoted to `measured`."
+      },
+      "why_it_matters": "Linux exposes this through numa_distance(). Page placement, migration policy, and topology-driven binding tools read it. If it is wrong, everything reading it is wrong in the same direction.",
+      "probe": {
+        "id": "numa-matrix",
+        "tool": "bin/ptrchase (latency) AND bin/bwmatrix (bandwidth), full N x N",
+        "rationale": "Two independently written tools measuring different physical quantities. Agreement in *rank order* across all pairs is far stronger evidence than either alone, and rules out a tool artifact. Latency is the sensitive metric; bandwidth is the corroborator and may not discriminate at all -- run both, and do not let a flat bandwidth result overrule a clear latency one.",
+        "passes": 3,
+        "conditions": {
+          "pages": "4K if huge pages cannot be allocated remotely -- record which",
+          "threads": 1
+        },
+        "self_check": "Confirm memory binding took effect on every cell, including cpuless domains.",
+        "unsuitable_probes": [
+          {
+            "probe": "bandwidth alone",
+            "reason": "Bandwidth can span a few percent where latency spans double digits. A bandwidth-only study will reasonably call the domains interchangeable."
+          }
+        ]
+      },
+      "verdict_rule": "contradicted if measured tiers separate by more than 3x the noise floor while the declared matrix reports them equal, or if the declared rank order differs from measured.",
+      "consequence_if_wrong": "Placement and migration decisions treat non-equivalent domains as interchangeable and systematically underestimate the cost of crossing.",
+      "portability": "Universal, and the highest-value entry on every machine. Re-run rather than assume the Frontier result generalises."
+    },
+    {
+      "id": "numa.symmetry",
+      "domain": "numa",
+      "declares": "Implicitly, that crossing cost is symmetric -- a single scalar per pair.",
+      "declared_source": {
+        "primary": "hwloc distance matrix shape",
+        "note": "Not asserted so much as assumed by the data model: one value per pair."
+      },
+      "why_it_matters": "If direction matters, no scalar distance can express it, and the declared model is not merely miscalibrated but structurally insufficient.",
+      "probe": {
+        "id": "directional-matrix",
+        "tool": "bin/ptrchase + bin/bwmatrix, both directions reported separately, un-symmetrised",
+        "rationale": "Requires resisting the instinct to average A->B with B->A. Report both cells; symmetrise only in a derived view.",
+        "passes": 3,
+        "conditions": {
+          "note": "Same conditions as numa.distance_matrix -- this is a re-reading of the same run, not a new one."
+        },
+        "self_check": "not_applicable -- derived from an already-validated run.",
+        "unsuitable_probes": [
+          {
+            "probe": "any pre-symmetrised matrix",
+            "reason": "Averaging destroys the effect before it can be seen."
+          }
+        ]
+      },
+      "verdict_rule": "contradicted if any pair's two directions differ by more than 2x the noise floor and both metrics agree on the direction.",
+      "consequence_if_wrong": "A scalar distance model cannot represent the machine at all, regardless of calibration.",
+      "portability": "Universal."
+    },
+    {
+      "id": "gpu.device_inventory",
+      "domain": "gpu",
+      "declares": "How many accelerator devices exist and how they are indexed.",
+      "declared_source": {
+        "primary": "hwloc OS devices (RSMI/OpenCL/L0 backends)",
+        "fallback": "rocm-smi, rocminfo, xpu-smi, sycl-ls"
+      },
+      "why_it_matters": "The gap between physical packages and schedulable devices is a standing source of 2x errors in rank counts.",
+      "probe": {
+        "id": "device-enumeration",
+        "tool": "scripts/00_topo.sh, plus bin/gpu_ptrchase --matrix to confirm each index is independently addressable",
+        "rationale": "Enumeration alone can be believed; addressing every device and measuring self-latency proves the indices are real and distinct.",
+        "passes": 1,
+        "conditions": {
+          "visibility": "record ROCR_VISIBLE_DEVICES / ZE_AFFINITY_MASK -- the visible index is often not the physical one"
+        },
+        "self_check": "Confirm the visible-device mask is unset or known; a masked run silently enumerates a subset.",
+        "unsuitable_probes": []
+      },
+      "verdict_rule": "misleading if the schedulable device count differs from the package count a user would read off the node diagram.",
+      "consequence_if_wrong": "Half the accelerator idle, or ranks oversubscribed 2:1.",
+      "portability": "Universal and high-yield: MI250X exposes 2 GCDs per package, Intel Max exposes tiles, MI300A unifies CPU and GPU entirely. The right answer differs on every target; the question does not."
+    },
+    {
+      "id": "gpu.numa_affinity",
+      "domain": "gpu",
+      "declares": "Which NUMA domain each accelerator is physically attached to.",
+      "declared_source": {
+        "primary": "hwloc device locality (cpuset of the OS device)",
+        "fallback": "rocm-smi --showtoponuma"
+      },
+      "why_it_matters": "Drives --gpu-bind=closest and every host-buffer placement decision.",
+      "probe": {
+        "id": "host-device-latency-matrix",
+        "tool": "bin/gpu_ptrchase --matrix, host memory bound per NUMA domain",
+        "rationale": "MUST be latency. On at least one target, host<->device *bandwidth* is flat to within 0.1% across every NUMA/GCD pair -- the link saturates well below the point where placement matters for bulk copies. A bandwidth probe here returns a flat result that looks like 'affinity does not matter' and is simply the wrong instrument.",
+        "passes": 5,
+        "conditions": {
+          "allocator": "host buffer explicitly bound per domain, NOT default hipHostMalloc/malloc placement"
+        },
+        "self_check": "Confirm the host buffer landed on the intended domain. Default pinned-host allocators do not honour an outer numactl in all cases.",
+        "unsuitable_probes": [
+          {
+            "probe": "rocm-bandwidth-test host<->device",
+            "reason": "Flat across all pairs on Frontier (25.27 GB/s +/- 0.02). Cannot discriminate."
+          }
+        ]
+      },
+      "verdict_rule": "confirmed if the measured fastest domain per device matches the declared one. Record the mapping explicitly even when confirmed -- it is frequently non-obvious.",
+      "consequence_if_wrong": "Every rank binds to a distant accelerator while believing it bound to the near one.",
+      "portability": "Universal. Collapses to a trivial answer on unified-memory APUs, which is itself the result worth recording."
+    },
+    {
+      "id": "gpu.interconnect_cost",
+      "domain": "gpu",
+      "declares": "Relative cost of device-to-device links.",
+      "declared_source": {
+        "primary": "rocm-smi XGMI link weights",
+        "fallback": "vendor topology table; xpu-smi topology on Intel",
+        "note": "hwloc does not model inter-device link cost."
+      },
+      "why_it_matters": "Determines which device pairs should hold communicating partners.",
+      "probe": {
+        "id": "peer-latency-matrix",
+        "tool": "bin/gpu_ptrchase --matrix, peer access",
+        "rationale": "Group measured peer latencies by declared weight class. Non-overlapping bands with monotone spacing confirm the declaration; overlap contradicts it.",
+        "passes": 5,
+        "conditions": {
+          "access": "random pointer chase over peer-mapped memory"
+        },
+        "self_check": "Confirm peer access was actually enabled; a failed enable silently falls back to a host round trip.",
+        "unsuitable_probes": []
+      },
+      "verdict_rule": "confirmed if weight classes form non-overlapping latency bands in the declared order. Report the gap between adjacent bands and whether spacing is linear.",
+      "consequence_if_wrong": "Communicating pairs placed across the slowest links on the node.",
+      "portability": "Vendor-specific source (XGMI / Xe Link / NVLink), identical question. This claim is the designated *control* for numa.distance_matrix: same vendor, same node, two cost tables -- if one is right and one is wrong, that is a far sharper finding than 'firmware is unreliable'."
+    },
+    {
+      "id": "gpu.memory_hierarchy",
+      "domain": "gpu",
+      "declares": "Device cache levels and memory sizes.",
+      "declared_source": {
+        "primary": "rocminfo / sycl-ls device query",
+        "fallback": "vendor spec sheet"
+      },
+      "why_it_matters": "Kernel blocking targets. Also validates the GPU latency tool against known hardware.",
+      "probe": {
+        "id": "gpu-cache-curve",
+        "tool": "bin/gpu_ptrchase --curve",
+        "rationale": "No stock tool reports pointer-chase latency on device memory; bandwidth tools cover bandwidth only. This is a genuine gap, not a re-measurement.",
+        "passes": 5,
+        "conditions": {
+          "access": "random",
+          "device": "per-device, not just device 0"
+        },
+        "self_check": "Confirm the chase is not being optimised away -- dependent loads only.",
+        "unsuitable_probes": []
+      },
+      "verdict_rule": "confirmed if plateau boundaries match declared cache sizes.",
+      "consequence_if_wrong": "Kernel tiling tuned to the wrong capacity.",
+      "portability": "Universal. On unified-memory parts the HBM plateau should coincide with the CPU-side result -- a cross-check the discrete machines cannot offer."
+    },
+    {
+      "id": "mem.page_backing",
+      "domain": "memory",
+      "declares": "That a large-page request was honoured.",
+      "declared_source": {
+        "primary": "madvise/MAP_HUGETLB return value, THP sysfs setting",
+        "note": "Both can indicate success while delivering 4K pages."
+      },
+      "why_it_matters": "Silent failure here invalidates every latency measurement taken afterwards, and the result still looks plausible.",
+      "probe": {
+        "id": "smaps-verify",
+        "tool": "hugepage.h smaps verification",
+        "rationale": "Read AnonHugePages from smaps for the actual mapping. Do not trust the madvise return -- on at least one test system MADV_HUGEPAGE returns success and delivers nothing.",
+        "passes": 1,
+        "conditions": {},
+        "self_check": "This claim IS the self-check for most other claims in the registry.",
+        "unsuitable_probes": [
+          {
+            "probe": "checking the THP sysfs setting",
+            "reason": "Reports policy, not what the mapping got."
+          }
+        ]
+      },
+      "verdict_rule": "contradicted if a successful request yields 4K backing. Record the working path per machine -- it is frequently a module that relinks rather than a runtime flag.",
+      "consequence_if_wrong": "Silent, plausible, wrong numbers everywhere downstream.",
+      "portability": "Universal and mandatory. Run first on any new machine."
+    },
+    {
+      "id": "net.nic_inventory",
+      "domain": "network",
+      "declares": "How many network interfaces the node has and how a job maps onto them.",
+      "declared_source": {
+        "primary": "hwloc network OS devices",
+        "fallback": "ls /sys/class/net, facility documentation"
+      },
+      "why_it_matters": "Decides whether a measured bandwidth number is per-link or per-node -- a factor of N error in either direction.",
+      "probe": {
+        "id": "nic-scaling",
+        "tool": "OSU osu_mbw_mr with 1 and with N concurrent pairs, NIC policy set explicitly",
+        "rationale": "One rank per node crosses one interface. Only scaling the pair count separates per-link from per-node capacity.",
+        "passes": 3,
+        "conditions": {
+          "ranks_per_node": "1 and N",
+          "policy": "record MPICH_OFI_NIC_POLICY or equivalent"
+        },
+        "self_check": "Confirm ranks actually spread across interfaces rather than all landing on one.",
+        "unsuitable_probes": [
+          {
+            "probe": "single-pair osu_bw",
+            "reason": "Measures one link. Quoting it next to the node spec looks like an Nx error."
+          }
+        ]
+      },
+      "verdict_rule": "misleading if the headline spec is per-node while the natural benchmark configuration measures one link.",
+      "consequence_if_wrong": "Communication budgets off by the NIC count.",
+      "portability": "Universal."
+    },
+    {
+      "id": "cost.page_size_penalty",
+      "domain": "cost",
+      "declares": null,
+      "declared_source": null,
+      "why_it_matters": "The penalty is not a constant. It is zero while the TLB covers the working set, spikes where TLB reach fails but cache still holds, then settles to an offset. A single scalar cannot express it, which is why no declarative source carries it.",
+      "probe": {
+        "id": "page-size-delta",
+        "tool": "bin/ptrchase --curve, huge and 4K, differenced",
+        "rationale": "Same measurement twice with one variable changed. The regime structure only appears across the full size sweep -- a single working-set size gives a number that is misleading at every other size.",
+        "passes": 3,
+        "conditions": {
+          "regime_variable": "working set size"
+        },
+        "self_check": "mem.page_backing must pass on the huge-page arm, or the two arms are identical and the delta is a false null.",
+        "unsuitable_probes": [
+          {
+            "probe": "streaming bandwidth",
+            "reason": "Sequential reads amortise the page walk across a whole page and barely register the effect."
+          }
+        ]
+      },
+      "verdict_rule": "undeclared. Report as a curve with the regime boundaries named, never as a single ratio.",
+      "consequence_if_wrong": "TLB misses attributed to memory latency.",
+      "portability": "Universal. This is the first entry hwloc's data model structurally cannot hold: it is a curve, not a scalar attribute."
+    },
+    {
+      "id": "cost.loaded_latency_knee",
+      "domain": "cost",
+      "declares": null,
+      "declared_source": null,
+      "why_it_matters": "Peak bandwidth and usable bandwidth are different operating points, often far apart. The knee, not the peak, is where a real application should sit.",
+      "probe": {
+        "id": "loaded-latency-sweep",
+        "tool": "bin/loaded_lat, dense injection-delay sweep",
+        "rationale": "Sweep injection delay against one latency thread. The interesting feature is the knee and it is easy to sample straight past it -- a coarse sweep renders the whole transition as one vertical jump. Densify around the transition once located.",
+        "passes": 3,
+        "conditions": {
+          "traffic": "read-only unless stated",
+          "threads": "N-1 bandwidth threads, 1 latency thread",
+          "regime_variable": "offered load"
+        },
+        "self_check": "Confirm the sweep has points inside the knee, not only bracketing it.",
+        "unsuitable_probes": [
+          {
+            "probe": "peak bandwidth alone",
+            "reason": "Reports the worst latency point on the curve as if it were the operating point."
+          }
+        ]
+      },
+      "verdict_rule": "undeclared. Report peak, knee, and idle floor together; the useful number is the fraction of peak available at the knee.",
+      "consequence_if_wrong": "Applications tuned to saturate bandwidth run at multiples of the necessary latency.",
+      "portability": "Universal. Read/write mix is a known axis this probe does not yet sweep."
+    },
+    {
+      "id": "cost.host_device_transfer",
+      "domain": "cost",
+      "declares": null,
+      "declared_source": null,
+      "why_it_matters": "Whether device-resident buffers beat host-staged ones changes sign with message size. A single-size measurement gives the wrong universal answer.",
+      "probe": {
+        "id": "buffer-residency-sweep",
+        "tool": "OSU bandwidth and latency, host and device buffers, interleaved passes across the full size range",
+        "rationale": "Passes must be interleaved rather than blocked, so drift over an allocation cannot masquerade as a residency effect. Run a host-buffer arm with GPU-aware MPI enabled as the control -- it separates software-path cost from hardware-path cost in one run.",
+        "passes": 3,
+        "conditions": {
+          "regime_variable": "message size",
+          "interleaved": true
+        },
+        "self_check": "Confirm buffers are actually device-resident and that GPU-aware transport is engaged.",
+        "unsuitable_probes": [
+          {
+            "probe": "single message size",
+            "reason": "The effect changes sign; any single size generalises incorrectly."
+          }
+        ]
+      },
+      "verdict_rule": "undeclared. Report both crossover points -- bandwidth and latency cross at different sizes.",
+      "consequence_if_wrong": "Halo exchanges and bulk collectives given the same buffer-placement advice, which is wrong for one of them.",
+      "portability": "Universal, and expected to change character completely on unified-memory parts -- which is the cross-machine result worth having."
+    },
+    {
+      "id": "cost.contention_sensitivity",
+      "domain": "cost",
+      "declares": null,
+      "declared_source": null,
+      "why_it_matters": "Characterization on an idle node describes a machine nobody runs on. A real application is using its cores.",
+      "probe": {
+        "id": "contention-delta",
+        "tool": "re-run a chosen transfer or latency probe under a controlled CPU/memory load generator",
+        "rationale": "The confound is severe and worth stating up front: a load generator consumes cores as well as bandwidth. If the path under test needs host CPU, core starvation swamps the memory-contention effect being measured and can invert the result. Separate core pressure from bandwidth pressure, or report the result as confounded.",
+        "passes": 3,
+        "conditions": {
+          "regime_variable": "offered background load",
+          "note": "record cores consumed by the generator separately from bandwidth consumed"
+        },
+        "self_check": "Confirm the load generator actually ran and actually loaded -- a generator that dies on a missing library produces a clean, plausible, wrong null.",
+        "unsuitable_probes": []
+      },
+      "verdict_rule": "undeclared. Where the manipulation is confounded, record it as confounded rather than reporting the number.",
+      "consequence_if_wrong": "Placement advice valid only on an empty machine.",
+      "portability": "Universal."
+    }
+  ]
+}
