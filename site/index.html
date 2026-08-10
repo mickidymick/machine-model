@@ -817,9 +817,9 @@ node   0   1   2   3
 
   <section>
     <div class="rail">08 &mdash; Test</div>
-    <h2>How we would know it works &mdash; one experiment</h2>
+    <h2>How we know it works &mdash; two experiments, built</h2>
     <p class="lead-in">
-      Everything above is machinery. One experiment decides whether it is a paper, and the control has
+      Everything above is machinery. The experiment decides whether it is a paper, and the control has
       to hold the application half too, otherwise it beats a strawman with no context.
     </p>
     <div class="scroll">
@@ -832,9 +832,54 @@ node   0   1   2   3
       </table>
     </div>
     <p>
-      Same model, same source, one variable. Ask each arm for a launch configuration, run both,
-      compare wall clock. Inputs are codes already built and validated here &mdash; QMCPACK, plus AMG,
-      LULESH and GAPBS from the profiler work &mdash; so no hand-built application profiles are needed.
+      Same model, same source, one variable. Both arms are <b>generated from the same descriptor</b>
+      &mdash; <code>render_declared.py</code> emits everything the machine says about itself (the ACPI
+      SLIT, hwloc, <code>rocm-smi</code>, the vendor diagram) and <code>render.py</code> emits the
+      measured briefing. Nothing is paraphrased into or out of existence, so the control cannot be
+      accused of being built to lose. Where the declaration is wrong it is reproduced wrong, verbatim,
+      including the sentence <i>&ldquo;All four domains mutually equidistant.&rdquo;</i>
+    </p>
+    <div class="note">
+      <p>
+        <b>The control is deliberately given more than a real user has.</b> It also receives the
+        operational notes &mdash; the silent huge-page failure, the reserved cores &mdash; several of
+        which were in fact discovered by measurement rather than documented by the facility. That
+        biases against our own result. A win under those conditions is a conservative one.
+      </p>
+    </div>
+    <p>
+      The two experiments answer different questions, and separating them is what makes the numbers
+      defensible.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>A &mdash; does it know the machine?</th><th>B &mdash; does it map the application?</th></tr></thead>
+        <tbody>
+          <tr><td>Task</td><td>14 questions with checkable answers</td><td>4 QMCPACK configuration scenarios</td></tr>
+          <tr><td>Scored by</td><td>correct / hedged / wrong / <b>confidently wrong</b></td><td>wall clock of the proposed configuration</td></tr>
+          <tr><td>Needs machine time</td><td>no</td><td>yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The headline metric in A is <b>confidently wrong</b> &mdash; incorrect, stated as fact, with no
+      hedge. Ignorance is recoverable because it prompts the user to check; a confident wrong answer is
+      not. The questions are split four ways on purpose, and one split matters more than the rest:
+      three of them are cases where <b>the documentation is sufficient and both arms should score
+      equally</b>. If the measured arm wins there too, the control was built badly and the whole
+      result is suspect. That check is in the scorer, not in the write-up.
+    </p>
+    <p>
+      Two further questions have <b>no verified answer on either side</b> &mdash; the correct behaviour
+      is to decline. They test whether the briefing's hedges survive contact with a direct question, or
+      whether a model reading it will promote an <code>Unverified</code> row into a recommendation.
+    </p>
+    <p>
+      Inputs are codes already built and validated here &mdash; QMCPACK, plus AMG, LULESH and GAPBS
+      from the profiler work &mdash; so no hand-built application profiles are needed. The QMCPACK
+      baseline (1 rank / 16 walkers, 155.8&nbsp;s; 8 ranks / 112 walkers, 68.0&nbsp;s) goes to
+      <i>both</i> arms: it is a fact about the application, not about the machine, and withholding it
+      would vary two things at once.
     </p>
     <div class="note">
       <p>
