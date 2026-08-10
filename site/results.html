@@ -280,13 +280,19 @@
   hr { border: none; border-top: 1px solid var(--rule); margin: 0; }
   footer { font-size: .82rem; color: var(--ink-3); font-family: var(--f-data); }
 </style>
+<style>
+  /* page-local: the shared stylesheet has no .muted, and results.html
+     borrows that stylesheet rather than owning it. */
+  .muted { color: var(--ink-3); font-size: .92rem; }
+  .masthead h1 { max-width: 34ch; }
+</style>
 </head>
 <body>
 <title>Results — does the artifact change what a model knows?</title>
 
-<div class="wrap">
+<div class="page">
 
-<header>
+<div class="masthead">
   <div class="rail">Results &mdash; 2026-08-10</div>
   <h1>Does the artifact change what a model knows about the machine?</h1>
   <p class="lead-in">
@@ -294,7 +300,7 @@
     with checkable answers. Both arms generated from the same descriptor, so the single
     difference between them is measurement.
   </p>
-</header>
+</div>
 
 <section>
   <h2>The result</h2>
