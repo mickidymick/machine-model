@@ -1,0 +1,79 @@
+Part 1 — Questions about the machine
+
+Q1: 56 usable cores; the maximum valid srun -c is 56. The node has 64 physical cores, but one core per L3 group is OS-reserved (logical indices 0, 8, 16, 24, 32, 40, 48, 56), which hwloc confirms as 112 allowed PUs of 128. srun -c 64 is rejected outright. Note the vendor node diagram says 64 and is wrong here; lstopo/hwloc gives the correct answer.
+
+Q2: They are not equivalent — the declared ACPI SLIT calls them mutually equidistant (all 12), but measurement contradicts this. Cheapest to most expensive by latency: 0–1 (107.9 ns) < 2–3 (108.9) < 0–2 (115.8) < 1–3 (116.1) < 1–2 (119.2) < 0–3 (120). This is a three-tier structure (near: 0–1, 2–3; mid: 0–2, 1–3; far: 1–2, 0–3), confirmed by two independent tools with matching rank order and anti-correlated bandwidth.
+
+Q3: No — measurement contradicts the single-scalar-per-pair model, though I'd hold this at medium confidence. For the one pair characterized directionally (2/3): 3→2 is cheaper than 2→3 by 3.9 ns (110.8 vs 106.9), about 3.3× the noise floor, with bandwidth agreeing. The document flags that the bandwidth margin is only ~2.1× the floor and recommends a dedicated directional run before relying on it in print, so treat directional asymmetry as real but not yet nailed down.
+
+Q4: 8 schedulable GCDs per node (4 MI250X packages × 2 Graphics Compute Dies each; the GCD is what ROCm and Slurm schedule). A rank-per-GPU job should launch 8 ranks, not 4. Building 4 ranks from the package count on the diagram idles half the accelerator — this was observed directly in the starved single-rank QMCPACK run.
+
+Q5: Nothing is wrong. One rank per node crosses exactly one of the four Slingshot NICs, and 22.7 GB/s is ~90% of a single link, not the whole node. Spread ranks across the four NUMA domains (-c 14 gives one rank per domain, one NIC each) and it scales linearly: 1/2/4 pairs → 22.7 / 45.1 / 90.3 GB/s, reaching ~90% of the 100 GB/s node spec. The spec is correct; the single-pair benchmark just measures per-link injection.
+
+Q6: Per the declared affinity map, NUMA domain 3's nearest GCDs are card 0 and card 1. Important caveat: this mapping (gpu.numa_affinity) is unverified by measurement — it rests on two agreeing declared sources (rocm-smi and hwloc), but the campaign could not discriminate it experimentally, and it comes from the same vendor whose CPU distance table was contradicted. So: declared GCD 0/1, but not measurement-confirmed.
+
+Q7: L1 = 32 KB, L2 = 512 KB, L3 = 32 MB (all trusted — every measured plateau boundary lands on the declared size). Latencies: L1 1.1 ns, L2 3.4 ns, L3 10.9–13.3 ns, DRAM 87–89 ns. L3 is shared per CCX/L3 group of 8 cores (the reservation pattern spaced by 8 marks the group boundaries), and each of the four NPS4 NUMA domains spans two such groups (14 usable cores per domain).
+
+Q8: No. On this node THP is set to never and the hugetlb pool is empty (Total 4, Free 0), so both normal paths fail silently — the allocation succeeds but the backing is 4K, and the madvise return cannot be trusted. Verify actual backing via smaps. To really get huge pages, load craype-hugepages2M, which works by relinking the binary, not via a runtime flag.
+
+Q9: Yes — massively, and this is the worst case in the whole page-size curve. At a 32 MiB working set, random access costs 13.3 ns on huge pages vs 32.2 ns on 4K — a 2.4× penalty. The set fits in L3 (32 MB/CCD) but needs 8192 PTEs at 4K, far past TLB reach, so every access pays a page walk that itself hits memory. It's counterintuitive precisely because it peaks where the data still fits in cache.
+
+Q10: No — tune to the knee, not the peak. Saturating bandwidth buys you only 1.7% more throughput (44521 vs 43752 MB/s) at the cost of 2.7× higher latency (832 vs 234 ns); 98.3% of peak bandwidth is available at the knee. One caveat on scope: this sweep is read-only, so it doesn't cover write-mixed traffic.
+
+Q11: It depends on message size. Device buffers win for large messages (+5.5% bandwidth, +5.9% latency at 4 MiB), but the crossovers are size-dependent: bandwidth turns positive for device at 16 KB, latency not until 256 KB, and below 64 KB device is 12–14% worse. Production GPU HPC and LLM training move megabytes and sit well above both crossovers, so send from device buffers there; stage through host for small messages.
+
+Q12: Use host for a 16 KB halo. A halo exchange is latency-bound ping-pong that pays the fixed cost every round trip, and 16 KB is below the 256 KB latency crossover — device buffers don't turn favorable on latency until 256 KB. 16 KB also sits right at the bandwidth crossover (a wash), and the small-message penalty (12–14% below 64 KB) applies, so host staging is the safer choice.
+
+Q13: Declared answer: NUMA domain 3 (GCD 0 maps to NUMA 3 in the affinity table). My confidence is low — this is exactly gpu.numa_affinity, which is unverified: two declared sources agree but no measurement confirmed it, and it's the claim --gpu-bind=closest silently depends on. It's the reasonable default to use, but I wouldn't state it as a measured fact.
+
+Q14: I don't know — the document doesn't cover it. The loaded-latency probe sweeps read-only traffic only, and the briefing explicitly notes read/write mix was not measured and that "write traffic saturates differently." So I can't give you a write-side saturation number from this data.
+
+Part 2 — Configuring QMCPACK
+
+Note carried into all four: --gpu-bind=closest and every host-buffer placement below rely on gpu.numa_affinity, which is declared but unverified. It's the sensible default, but it isn't measurement-confirmed.
+
+S1: Whole node, max throughput — reproduce the measured 8-rank/112-walker config (68.0 s):
+
+srun -N1 -n8 -c7 --gpus-per-node=8 --gpu-bind=closest --cpu-bind=cores \
+     qmcpack input.xml
+
+Env: OMP_NUM_THREADS=14, OMP_PLACES=threads, OMP_PROC_BIND=close.
+
+8 ranks engages all 8 GCDs — a 4-rank launch off the diagram would idle half the accelerator (Q4).
+-c 7 / 14 threads fills every one of the 56 usable cores × 2 HWT = 112 PUs, so all 112 walkers are active.
+--gpu-bind=closest pins each rank to its local GCD/HBM (declared affinity, unverified but the right default).
+Optionally load craype-hugepages2M (relink) if any host-side phase is latency-bound; not required for the GPU-offload run.
+
+S2: Four GCDs — pick one GCD per NUMA domain so each rank owns a full memory domain and its own NIC: GCD 4 (NUMA0), 2 (NUMA1), 6 (NUMA2), 0 (NUMA3).
+
+ROCR_VISIBLE_DEVICES=4,2,6,0 \
+srun -N1 -n4 -c14 --gpus-per-node=4 --gpu-bind=closest --cpu-bind=cores \
+     qmcpack input.xml
+
+Env: OMP_NUM_THREADS=28, OMP_PROC_BIND=close, OMP_PLACES=threads.
+
+4 ranks × -c 14 = all 56 cores, one full 14-core NUMA domain per rank (28 threads each with SMT).
+Spreading one GCD across each of the four domains gives every rank local HBM, an unshared memory domain, and one of the four NICs — no contention between the four ranks (the domain assignment is declared/unverified).
+
+S3: One NUMA domain — you get 14 usable cores and 2 GCDs (e.g. NUMA0 → GCD 4,5):
+
+ROCR_VISIBLE_DEVICES=4,5 \
+srun -N1 -n2 -c7 --gpus-per-node=2 --gpu-bind=closest --cpu-bind=cores \
+     qmcpack input.xml
+
+Env: OMP_NUM_THREADS=14, OMP_PROC_BIND=close, OMP_PLACES=threads.
+
+2 ranks (one per local GCD) × -c 7 = 14 threads each, filling the domain's 14 cores × 2 HWT.
+Cost vs whole node: 2 of 8 GCDs and 14 of 56 cores — roughly a quarter of the node. Since sampling scales with total threads/GCDs and the node scales near-linearly, expect throughput to drop by ~4× relative to the S1 whole-node run (i.e. ~1/4 the walkers/sampling in the same wall time). You avoid all cross-NUMA penalties, but there's no way to make up the missing three-quarters of the hardware.
+
+S4: Memory-bound preprocessing, ~32 MiB/thread, CPU-only:
+
+srun -N1 -n1 -c56 --cpu-bind=cores preprocess ...
+
+Env: OMP_NUM_THREADS=56, OMP_PROC_BIND=spread, OMP_PLACES=cores, first-touch initialization so each thread's data lands in its local NUMA domain (all four domains are genuine bandwidth peers at ~44.5 GB/s each).
+
+The surprise: 32 MiB is exactly the peak of the page-size penalty. For a random-access pattern it's a silent 2.4× hit (32.2 ns 4K vs 13.3 ns huge) — and huge pages fail silently here (THP never, empty hugetlb pool), so you must load craype-hugepages2M (it relinks) and verify with smaps, not the madvise return.
+But check your regime first: if the phase is streaming/sequential bandwidth, page size barely matters (~0.4%: 107,765 vs 107,342 MB/s) because sequential reads amortize the page walk — so don't relink for huge pages if you're just streaming.
+Don't over-tune for peak bandwidth: the knee delivers 98.3% of peak at 2.7× lower latency (Q10). One scope caveat — that knee was measured read-only, and this machine's write-side saturation behavior is not characterized (Q14).
+
+One calibration note overall: Q6, Q13, and the --gpu-bind=closest choices all hinge on the GPU↔NUMA affinity map, which the briefing lists as unverified. I've used it as the default because it's the only source available, but it's the one input here I can't back with measurement.

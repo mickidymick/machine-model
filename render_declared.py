@@ -131,13 +131,28 @@ def main(argv):
 
     # Pitfalls are facility documentation, not measurement, so a well-informed
     # user could have them. Withholding them would build a strawman.
-    if d.get('pitfalls'):
+    # ONLY provenance == 'documented'. The rest were discovered by our own
+    # measurement campaign, and handing them to the control means the control is
+    # running on our results relabelled as documentation. That over-supply is
+    # what made q05 untenable as a docs_misleading question in the 2026-08-10 run.
+    docs = [p for p in d.get('pitfalls', [])
+            if p.get('provenance') == 'documented']
+    if docs:
         w('## Known operational notes')
         w()
-        for p in d['pitfalls']:
+        w('_Published by the facility or readable from the machine with standard '
+          'tools._')
+        w()
+        for p in docs:
             pid = p.get('id', '')
             w(f"**{pid}** — {p.get('symptom','')} {p.get('cause','')} "
               f"{p.get('remedy','')}")
+            w()
+        skipped = len(d.get('pitfalls', [])) - len(docs)
+        if skipped:
+            w(f"_{skipped} further operational note(s) exist in the descriptor but "
+              f"were discovered by measurement and are withheld from this "
+              f"rendering._")
             w()
 
     w('---')

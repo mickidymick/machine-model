@@ -29,6 +29,17 @@ The following is what the system reports about itself through its standard inter
 
 Measured on frontier00126 2026-08-10 via hwloc 2.11.2. The declared sources DISAGREE WITH EACH OTHER: hwloc is right and the diagram is wrong. A user who runs lstopo gets the correct answer; a user who reads the node diagram does not.
 
+### Which cores and NUMA domains the system reserves for its own work, and where device interrupts land
+
+*Reported by: hwloc device locality (captured); Slurm CoreSpecCount, /proc/cmdline, /proc/irq/*/smp_affinity_list, system.slice cpuset (NOT yet captured)*
+
+- **device locality**:
+  - **note**: Answered offline from declared/frontier-compute.hwloc.xml -- no machine time required.
+  - **slingshot nics**: hsn0->NUMA3, hsn1->NUMA1, hsn2->NUMA0, hsn3->NUMA2 -- exactly one per domain, symmetric
+  - **asymmetry**: ens2 (management ethernet), nvme0n1, nvme1n1 and dma0chan0 ALL sit on NUMA 0
+  - **implication**: NUMA 0 carries three devices no other domain has. More interrupt handling and more DMA through one domain's memory controller. A job that is I/O heavy drives that traffic through NUMA 0 specifically.
+- **not yet captured**: Slurm CoreSpecCount / CpuSpecList -- would be a SECOND declared source for the 8 reserved cores, which currently rests on hwloc alone, isolcpus / nohz_full / rcu_nocbs from /proc/cmdline, /proc/irq/*/smp_affinity_list -- configured IRQ placement, system.slice cpuset -- where system services may run
+
 ## Memory topology
 
 ### Number of NUMA domains and which cores and memory belong to each
@@ -74,10 +85,8 @@ One scalar per pair; direction not representable.
   - **NUMA 2**: GCD 6, GCD 7
   - **NUMA 3**: GCD 0, GCD 1
 - **corroboration**:
-  - **sources**: rocm-smi --showtoponuma, hwloc 2.11.2 topology (os=cardN -> NUMANode)
-  - **agreement**: exact, including the non-obvious ordering
-  - **map**: card0,1->NUMA3  card2,3->NUMA1  card4,5->NUMA0  card6,7->NUMA2
-  - **note**: Two independent declared sources agree. Since measurement cannot discriminate here, they are the only sources that get to speak on this claim.
+  - **sources**: rocm-smi --showtoponuma, hwloc (os=cardN -> NUMANode)
+  - **note**: Both list eight devices, GPU[0]..GPU[7] / card0..card7, and agree on the mapping.
 
 ### Relative cost of device-to-device links
 
@@ -110,17 +119,17 @@ A large-page request appears to succeed.
 
 ## Known operational notes
 
-**huge-pages-fail-silently** — Latency numbers plausible but ~16 ns high; no error anywhere. THP is [never] and the hugetlb pool is empty (Total 4, Free 0). Both normal paths fail silently. Load craype-hugepages2M -- it works by relinking, not a runtime flag. Then verify via smaps; do not trust the madvise return.
+_Published by the facility or readable from the machine with standard tools._
+
+**huge-pages-fail-silently** — Latency measurements come out high with no error anywhere. THP is [never] and the hugetlb pool is empty (Total 4, Free 0). Both normal paths fail silently. Load craype-hugepages2M -- it works by relinking, not a runtime flag. Then verify via smaps; do not trust the madvise return.
 
 **core-count-ceiling** — `srun -c 64` is rejected. One core per L3 group is OS-reserved: 0, 8, 16, 24, 32, 40, 48, 56. `-c 56` is the ceiling. It also divides cleanly: 14 cores / 28 threads per NUMA domain.
 
 **login-nodes-not-representative** — Topology conclusions drawn on a login node do not hold on compute. login08 is EPYC 7763 + a single MI210; compute is 7A53 + 4x MI250X. Both are gfx90a so builds carry over, but no topology measurement from a login node is valid. Run 00_topo.sh inside an allocation.
 
-**one-rank-one-nic** — Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec. One rank per node crosses one of four Slingshot NICs. 22.7 GB/s is ~90% of a single link. Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain. Measured 2026-08-10: 1/2/4 pairs give 22.7 / 45.1 / 90.3 GB/s, linear, reaching ~90% of the node spec.
+**one-rank-one-nic** — Inter-node bandwidth from one rank per node reads far below the node spec. One rank per node crosses one of four Slingshot NICs. Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain.
 
-**osu-upc-build** — OSU 7.4 fails to build against the Cray toolchain. c/upc is unconditionally in the top-level SUBDIRS and there is no configure flag to disable it; the Cray compiler has no UPC front end. Build only c/mpi.
-
-**qmcpack-build-script** — The shipped Frontier build script fails or takes 4-8 hours. config/build_olcf_frontier_ROCm.sh hardcodes BOOST_ROOT to /ccs/proj/mat151 (inaccessible outside that project) and builds all eight variants. Use the boost/1.86.0 module and build only gpu_real -- about 15 minutes.
+_2 further operational note(s) exist in the descriptor but were discovered by measurement and are withheld from this rendering._
 
 ---
 

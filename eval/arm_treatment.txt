@@ -381,7 +381,7 @@ Whether device-resident buffers beat host-staged ones changes sign with message 
 Each of these presents as something other than its cause. Symptom, cause, remedy.
 
 **huge-pages-fail-silently**
-- Symptom: Latency numbers plausible but ~16 ns high; no error anywhere.
+- Symptom: Latency measurements come out high with no error anywhere.
 - Cause: THP is [never] and the hugetlb pool is empty (Total 4, Free 0). Both normal paths fail silently.
 - Remedy: Load craype-hugepages2M -- it works by relinking, not a runtime flag. Then verify via smaps; do not trust the madvise return.
 - Further: Once linked, the default allocator ABORTS under a remote `numactl -m`, because the module provisions only the local node's pool. Local latency and the NUMA matrix need two separate passes.
@@ -397,10 +397,9 @@ Each of these presents as something other than its cause. Symptom, cause, remedy
 - Remedy: Both are gfx90a so builds carry over, but no topology measurement from a login node is valid. Run 00_topo.sh inside an allocation.
 
 **one-rank-one-nic**
-- Symptom: Inter-node bandwidth reads as ~24 GB/s against a 100 GB/s node spec.
-- Cause: One rank per node crosses one of four Slingshot NICs. 22.7 GB/s is ~90% of a single link.
-- Remedy: Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain. Measured 2026-08-10: 1/2/4 pairs give 22.7 / 45.1 / 90.3 GB/s, linear, reaching ~90% of the node spec.
-- Further: MPICH_OFI_NIC_POLICY=NUMA is NOT what does the work: with ranks already spread, setting it changes throughput by 0.13% (90262 vs 90148 MB/s). The rank spread is the whole effect. Also note -c 56 makes Cray MPICH refuse the policy outright -- 'Rank 0 is not confined to a single NUMA node'.
+- Symptom: Inter-node bandwidth from one rank per node reads far below the node spec.
+- Cause: One rank per node crosses one of four Slingshot NICs.
+- Remedy: Spread ranks across the four NUMA domains -- `-c 14` gives one rank per domain.
 
 **osu-upc-build**
 - Symptom: OSU 7.4 fails to build against the Cray toolchain.
@@ -425,10 +424,8 @@ Declared but **not confirmed by measurement**:
   - **NUMA 2**: GCD 6, GCD 7
   - **NUMA 3**: GCD 0, GCD 1
 - **corroboration**:
-  - **sources**: rocm-smi --showtoponuma, hwloc 2.11.2 topology (os=cardN -> NUMANode)
-  - **agreement**: exact, including the non-obvious ordering
-  - **map**: card0,1->NUMA3  card2,3->NUMA1  card4,5->NUMA0  card6,7->NUMA2
-  - **note**: Two independent declared sources agree. Since measurement cannot discriminate here, they are the only sources that get to speak on this claim.
+  - **sources**: rocm-smi --showtoponuma, hwloc (os=cardN -> NUMANode)
+  - **note**: Both list eight devices, GPU[0]..GPU[7] / card0..card7, and agree on the mapping.
 
 
 **Why it matters that this is open**: This is the claim --gpu-bind=closest depends on, and it is currently taken on faith from the same vendor whose CPU distance table is contradicted above.
@@ -440,6 +437,40 @@ Characterization on an idle node describes a machine nobody runs on. A real appl
 - **Confounded**: The load generator consumes cores as well as bandwidth. The GPU-direct path needs more host CPU, so core starvation swamped the effect under test. Recorded as confounded rather than reported as a number.
 
 Side finding (confidence: medium): GPU-direct is markedly more sensitive to CPU contention than host transfers -- 75% degradation versus 50%.
+
+### cpu.system_interference — untested
+
+This is the question topology-driven binding tools (mpibind and friends) exist to answer: which resources should an application be kept off. A rank sharing a core with an interrupt handler pays jitter that no bandwidth or latency number predicts, and a domain hosting the NVMe controllers carries DMA traffic the others do not.
+
+Declared but **not confirmed by measurement**:
+- **device locality**:
+  - **note**: Answered offline from declared/frontier-compute.hwloc.xml -- no machine time required.
+  - **slingshot nics**: hsn0->NUMA3, hsn1->NUMA1, hsn2->NUMA0, hsn3->NUMA2 -- exactly one per domain, symmetric
+  - **asymmetry**: ens2 (management ethernet), nvme0n1, nvme1n1 and dma0chan0 ALL sit on NUMA 0
+  - **implication**: NUMA 0 carries three devices no other domain has. More interrupt handling and more DMA through one domain's memory controller. A job that is I/O heavy drives that traffic through NUMA 0 specifically.
+- **not yet captured**: Slurm CoreSpecCount / CpuSpecList -- would be a SECOND declared source for the 8 reserved cores, which currently rests on hwloc alone, isolcpus / nohz_full / rcu_nocbs from /proc/cmdline, /proc/irq/*/smp_affinity_list -- configured IRQ placement, system.slice cpuset -- where system services may run
+
+
+## Measured, no declared source
+
+Established by measurement and reported by nothing on the machine. These are results, not leads -- distinct from the section below.
+
+**gpu.die_parity** — Host-memory latency splits by GCD die parity. Even dies (0,2,4,6) mean 1382 ns; odd dies (1,3,5,7) mean 1224 ns. The slowest odd die beats the fastest even one in every pass.
+
+- **per pass**:
+  - pass 1, even 1388.6, odd 1223.2, gap 165.4, slowest odd to fastest even 144
+  - pass 2, even 1391.9, odd 1224.7, gap 167.2, slowest odd to fastest even 112.2
+  - pass 3, even 1365.9, odd 1224, gap 141.9, slowest odd to fastest even 91.5
+- **conditions**:
+  - **host memory**: explicitly bound per NUMA domain, verified with move_pages
+  - **buffer**: 512 MiB
+  - **passes**: 3
+
+- **Why this is now a result**: July flagged this and declined to claim it for one specific reason: host memory used default hipHostMalloc placement, so the NUMA domain was uncontrolled and the absolute numbers were 'to some host domain'. That caveat is gone -- every allocation is now bound and verified. And the separation holds in all three passes tested INDEPENDENTLY, which pooling would not have established: pooling lets one lucky pass carry a result.
+- **Further structure**: Even dies are also NUMA-sensitive (across-domain range 88-175 ns) while odd dies are nearly flat (27-55 ns), and even dies are far noisier pass-to-pass (129-155 ns vs 29-43 ns).
+- **Consequence**: Host-memory-bound kernels should prefer odd GCDs; peer-heavy kernels the even ones. Nothing in ROCm's placement logic knows this, and no declared source reports it.
+- **Remaining caveat**: One node type, one node. Not established machine-wide.
+- **Confidence**: medium
 
 ## Leads — observed, deliberately not asserted
 

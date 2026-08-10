@@ -1,0 +1,66 @@
+{
+  "model": "claude-opus-4-8",
+  "effort": "high",
+  "date": "2026-08-10",
+  "session": "fresh claude.ai conversation",
+  "arm": "treatment",
+  "raw": "eval/raw_treatment.txt",
+  "scores": {
+    "q01": {
+      "outcome": "correct",
+      "note": "Same as control. 56 / -c 56 / hwloc 112 of 128."
+    },
+    "q02": {
+      "outcome": "correct",
+      "note": "'They are not equivalent' + all six pairs with latencies + three-tier structure + anti-correlated bandwidth. Control called this a flat tie. THE differentiator."
+    },
+    "q03": {
+      "outcome": "correct",
+      "note": "Not symmetric, 3->2 cheaper by 3.9ns at 3.3x the floor -- AND carried our own caveat forward: bandwidth margin only 2.1x, wants a dedicated directional run before print."
+    },
+    "q04": {
+      "outcome": "correct",
+      "note": "8 GCDs. Both arms correct, but control reached it via the leaked card list."
+    },
+    "q05": {
+      "outcome": "correct",
+      "note": "Per-link, linear scaling, spec is correct."
+    },
+    "q06": {
+      "outcome": "correct",
+      "note": "GCD 0,1 -- and volunteered that the map is declared-but-unverified and comes from the same vendor whose SLIT was contradicted."
+    },
+    "q07": {
+      "outcome": "correct",
+      "note": "Sizes + measured latencies, and derived 14 usable cores/domain from 2 L3 groups x 8 minus 2 reserved."
+    },
+    "q08": {
+      "outcome": "correct",
+      "note": "Silent failure, craype-hugepages2M relinks, verify via smaps."
+    },
+    "q09": {
+      "outcome": "correct",
+      "note": "2.4x with both numbers (13.3 vs 32.2ns), 8192 PTEs, and named it the worst point on the curve. Control had the mechanism but no magnitude."
+    },
+    "q10": {
+      "outcome": "correct",
+      "note": "'Tune to the knee, not the peak' -- 1.7% throughput for 2.7x latency, 98.3% at the knee, plus the read-only scope caveat. Control could not answer."
+    },
+    "q11": {
+      "outcome": "correct",
+      "note": "Both crossovers (16KB bandwidth, 256KB latency) and the sub-64KB penalty. Control had no numbers."
+    },
+    "q12": {
+      "outcome": "correct",
+      "note": "Host. Correctly reasoned from the 256KB latency crossover and ping-pong paying the fixed cost every trip. Control leaned device -- the wrong direction."
+    },
+    "q13": {
+      "outcome": "correct",
+      "note": "'Declared answer NUMA 3. My confidence is low -- this is exactly gpu.numa_affinity, which is unverified... I wouldn't state it as a measured fact.' Control said HIGHLY CONFIDENT. The Unverified section survived contact."
+    },
+    "q14": {
+      "outcome": "hedged",
+      "note": "Declined, citing the read-only sweep. Same as control -- correct behaviour, nothing to differentiate."
+    }
+  }
+}

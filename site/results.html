@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { display: block; max-width: 100%; }
+</style>
+<style>
+  :root {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+
+    --f-data: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    --f-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+    --gutter: 7.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #0e1417;
+      --surface-1:  #151d21;
+      --ink:        #dfe7eb;
+      --ink-2:      #9dadb6;
+      --ink-3:      #77878f;
+      --rule:       #2a373d;
+      --rule-soft:  #202b30;
+      --measured:   #58b3ac;
+      --measured-bg:#122b2b;
+      --declared:   #d9924f;
+      --declared-bg:#2c2115;
+      --critical:   #d97570;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0e1417;
+    --surface-1:  #151d21;
+    --ink:        #dfe7eb;
+    --ink-2:      #9dadb6;
+    --ink-3:      #77878f;
+    --rule:       #2a373d;
+    --rule-soft:  #202b30;
+    --measured:   #58b3ac;
+    --measured-bg:#122b2b;
+    --declared:   #d9924f;
+    --declared-bg:#2c2115;
+    --critical:   #d97570;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; flex-direction: column; gap: 1.25rem; }
+  .kicker {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.25rem;
+  }
+  h1 {
+    font-family: var(--f-data);
+    font-size: clamp(1.6rem, 4vw, 2.35rem);
+    line-height: 1.14;
+    letter-spacing: -.025em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    max-width: 26ch;
+  }
+  .standfirst { font-size: 1.06rem; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .standfirst b { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections with gutter rail ---- */
+  section { display: grid; gap: 1.15rem; }
+  @media (min-width: 60rem) {
+    section {
+      grid-template-columns: var(--gutter) minmax(0, 1fr);
+      column-gap: 2.5rem;
+    }
+    /* Row 1 only. Spanning N rows forces N row tracks, and the row-gaps
+       between the empty ones pile up as dead space at the section's end. */
+    section > .rail { grid-column: 1; grid-row: 1; }
+    section > :not(.rail) { grid-column: 2; }
+  }
+  .rail {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: .45rem;
+    border-top: 2px solid var(--ink);
+    align-self: start;
+  }
+  h2 {
+    font-family: var(--f-data);
+    font-size: 1.14rem;
+    font-weight: 600;
+    letter-spacing: -.015em;
+    margin: 0;
+    text-wrap: balance;
+    border-top: 2px solid var(--ink);
+    padding-top: .45rem;
+  }
+  @media (min-width: 60rem) { h2 { border-top: none; padding-top: .35rem; } }
+  section p { margin: 0; max-width: 68ch; }
+  .lead-in { font-size: 1.02rem; }
+
+  /* ---- lists ---- */
+  .items { list-style: none; display: flex; flex-direction: column; gap: 1.05rem; margin: 0; padding: 0; }
+  .items > li { display: flex; flex-direction: column; gap: .28rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
+  .items > li > .hd { font-weight: 600; }
+  .items > li > .bd { color: var(--ink-2); font-size: .95rem; max-width: 68ch; }
+  .items > li.key { border-left-color: var(--measured); }
+  .items > li.ask { border-left-color: var(--declared); }
+  .num { font-family: var(--f-data); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--measured); }
+  .when {
+    font-family: var(--f-data);
+    font-size: .72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--declared);
+  }
+
+  /* ---- figures ---- */
+  figure { margin: 0; display: flex; flex-direction: column; gap: .7rem; }
+  figure svg { max-width: 100%; height: auto; color: var(--ink); display: block; }
+  figcaption { font-size: .87rem; color: var(--ink-2); max-width: 68ch; }
+  .dg-box   { fill: var(--surface-1); stroke: currentColor; stroke-width: 1; }
+  .dg-acc   { fill: var(--measured-bg); stroke: var(--measured); stroke-width: 1.4; }
+  .dg-ghost { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-slot  { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-t     { fill: currentColor; font-family: var(--f-data); font-size: 12.5px; }
+  .dg-s     { fill: var(--ink-2); font-family: var(--f-body); font-size: 11px; }
+  .dg-l     { fill: var(--ink-3); font-family: var(--f-data); font-size: 10.5px; letter-spacing: .06em; }
+  .dg-a     { fill: var(--measured); font-family: var(--f-data); font-size: 12.5px; }
+  .dg-line  { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .dg-linea { stroke: var(--measured); stroke-width: 1.6; fill: none; }
+  .dg-dash  { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+  .dg-head  { fill: var(--ink); }
+  .dg-heada { fill: var(--measured); }
+
+  /* ---- side by side ---- */
+  .compare { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  @media (min-width: 48rem) { .compare { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 48rem) { .compare.single { grid-template-columns: 1fr; } }
+  .pane { background: var(--surface-1); padding: 1rem 1.1rem 1.15rem; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+  .pane .cap {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pane.right .cap { color: var(--measured); }
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--f-data);
+    font-size: .78rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  pre b { color: var(--ink); font-weight: 600; }
+  pre .m { color: var(--measured); }
+  pre .d { color: var(--declared); }
+  .pane .verdict { font-size: .89rem; color: var(--ink); }
+
+  code {
+    font-family: var(--f-data);
+    font-size: .88em;
+    background: var(--surface-1);
+    padding: .05em .3em;
+    border: 1px solid var(--rule-soft);
+  }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem .8rem .5rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--rule);
+  }
+  /* ---- knob table: verdict + status markers ---- */
+  .kn { font-weight: 600; }
+  .kn code { background: none; border: none; padding: 0; }
+  td.v { font-size: .87rem; }
+  .v-yes::before  { content: "\2713\00a0"; color: var(--measured); font-weight: 700; }
+  .v-part::before { content: "\007e\00a0"; color: var(--declared); font-weight: 700; }
+  .v-no::before   { content: "\2717\00a0"; color: var(--critical); font-weight: 700; }
+  .v-none::before { content: "\2014\00a0"; color: var(--ink-3); font-weight: 700; }
+  .st {
+    font-family: var(--f-data);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .st-in   { color: var(--measured); }
+  .st-part { color: var(--declared); }
+  .st-open { color: var(--ink-3); }
+  .legend {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem 1.4rem;
+  }
+
+  .note {
+    background: var(--surface-1);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--measured);
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    font-size: .93rem;
+  }
+  .note.warn { border-left-color: var(--declared); }
+  .note p { max-width: 68ch; }
+  a { color: var(--measured); }
+  a:focus-visible { outline: 2px solid var(--measured); outline-offset: 2px; }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 0; }
+  footer { font-size: .82rem; color: var(--ink-3); font-family: var(--f-data); }
+</style>
+</head>
+<body>
+<title>Results — does the artifact change what a model knows?</title>
+
+<div class="wrap">
+
+<header>
+  <div class="rail">Results &mdash; 2026-08-10</div>
+  <h1>Does the artifact change what a model knows about the machine?</h1>
+  <p class="lead-in">
+    Two arms, one model (Claude Opus 4.8, effort High), separate fresh sessions, 14 questions
+    with checkable answers. Both arms generated from the same descriptor, so the single
+    difference between them is measurement.
+  </p>
+</header>
+
+<section>
+  <h2>The result</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Question category</th><th>control</th><th>treatment</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Docs sufficient</td><td>5/5</td><td>5/5</td><td class="muted">tie &mdash; the validity check</td></tr>
+        <tr><td>Docs misleading</td><td>1/3</td><td>3/3</td><td></td></tr>
+        <tr><td>Measurement only</td><td>1/4</td><td>4/4</td><td></td></tr>
+        <tr><td>Neither knows</td><td>1/2</td><td>2/2</td><td class="muted">declining is the right answer</td></tr>
+        <tr><td><b>Confidently wrong</b></td><td><b>1</b></td><td><b>0</b></td><td class="muted">incorrect, stated as fact</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <b>The tie on &ldquo;docs sufficient&rdquo; is the number that makes the rest trustworthy.</b>
+    Five questions the documentation answers correctly, and both arms get all five. If the
+    measured arm had won there too, the control was built to lose and nothing else on this page
+    would mean anything.
+  </p>
+</section>
+
+<section>
+  <h2>Where the difference actually is</h2>
+  <p class="lead-in">
+    It is not that the control knows less. It is that the control cannot tell the difference
+    between a fact that is missing and a fact that is wrong.
+  </p>
+  <div class="note">
+    <p>
+      <b>Where the documentation says nothing, the control hedges correctly.</b> On the questions
+      no source answers &mdash; the loaded-latency operating point, the host-versus-device
+      crossover, the read/write mix &mdash; it declined cleanly every time. That is good behaviour,
+      and it is why the honest reading is not &ldquo;models don't know machines.&rdquo;
+    </p>
+  </div>
+  <p>
+    <b>Where the documentation is wrong, it repeats the error as fact.</b> Asked to rank the six
+    NUMA domain pairs by crossing cost:
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>answer</th></tr></thead>
+      <tbody>
+        <tr><td>control</td><td>&ldquo;All six pairs are equivalent&hellip; it&rsquo;s a flat tie.&rdquo;</td></tr>
+        <tr><td>treatment</td><td>&ldquo;They are not equivalent&rdquo; &mdash; then all six pairs, in order, with the three-tier structure</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The control is not guessing. It is reporting the ACPI SLIT accurately. The SLIT is wrong.
+    <b>Hedging protects a model from missing information but not from false information</b> &mdash;
+    and the control&rsquo;s own good behaviour everywhere else is what proves it.
+  </p>
+</section>
+
+<section>
+  <h2>The calibration question</h2>
+  <p class="lead-in">
+    One question has no verified answer on either side. The right response is to say so.
+    We asked where to place a host buffer for GCD 0, and how confident it was.
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>answer</th></tr></thead>
+      <tbody>
+        <tr><td>control</td><td>&ldquo;NUMA domain 3, and I&rsquo;m <b>highly confident</b> &mdash; backed by two independent agreeing sources.&rdquo;</td></tr>
+        <tr><td>treatment</td><td>&ldquo;Declared answer: NUMA domain 3. My confidence is <b>low</b> &mdash; this is exactly <code>gpu.numa_affinity</code>, which is unverified&hellip; I wouldn&rsquo;t state it as a measured fact.&rdquo;</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Same answer, opposite calibration. Both probes we ran against that claim failed to
+    discriminate, so the artifact records it as <code>unfalsifiable_here</code> &mdash; and the
+    briefing&rsquo;s <i>Unverified</i> section survived contact with a direct question instead of
+    being promoted into a recommendation. That was the property we were least sure would hold.
+  </p>
+</section>
+
+<section>
+  <h2>What we got wrong, and fixed</h2>
+  <p class="lead-in">
+    Three of these were caught by scoring our own experiment. They are on this page because a
+    result you cannot see the failure modes of is not a result.
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Problem</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>The control was over-supplied.</b> Five of six &ldquo;operational notes&rdquo; were our own discoveries, including NIC scaling measured that same afternoon.</td>
+          <td>The control was running on our results relabelled as documentation. Pitfalls now carry <code>provenance</code>, and only documented ones reach it.</td>
+        </tr>
+        <tr>
+          <td><b>The scoring rubric hid most of the result.</b> Counting a hedge as success everywhere scored &ldquo;honest but no answer&rdquo; the same as &ldquo;correct.&rdquo;</td>
+          <td>Both arms tied 4/4 on measurement-only questions where one answered and the other declined. A hedge now counts only where declining <i>is</i> correct. Control moved 11/14 &rarr; 8/14.</td>
+        </tr>
+        <tr>
+          <td><b>Promoting a finding deleted it.</b> <code>gpu.die_parity</code> moved from <code>flagged</code> to <code>observations</code>; the renderer knew only about <code>flagged</code>.</td>
+          <td>The finding vanished from the briefing with no error, leaving an open question referring to a result no reader ever saw. The treatment numbers above are a lower bound.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">
+    Both arms are being re-run against the corrected inputs. The first run is archived rather
+    than discarded &mdash; the gap between an over-supplied control and an honest one is itself a
+    measurement.
+  </p>
+</section>
+
+<section>
+  <h2>What this does not show</h2>
+  <div class="scroll">
+    <table>
+      <tbody>
+        <tr><td>One model, one effort level, one session per arm.</td><td class="muted">Not blinded, not replicated across models. A shape, not a study.</td></tr>
+        <tr><td>The control is a document we curated.</td><td class="muted">A real user has an assistant with shell access that gathers what it thinks to ask for. That arm is the honest baseline and has not been run.</td></tr>
+        <tr><td>No application was actually run.</td><td class="muted">This measures what a model knows, not whether the resulting configuration is faster. That is the QMCPACK experiment, and it needs machine time.</td></tr>
+        <tr><td>One machine, largely one node.</td><td class="muted">Whether any of this generalises is what Tuolumne and Aurora are for.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+
+</body>
+</html>
