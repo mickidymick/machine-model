@@ -16,7 +16,8 @@ build() {
   # machine; the CC wrapper links it automatically, so pointing CMake at it
   # explicitly is the fallback:
   #   -DLAPACK_LIBRARIES="$CRAY_LIBSCI_PREFIX_DIR/lib/libsci_cray.so"
-  cmake -DQMC_MPI=1 -DCMAKE_CXX_COMPILER=CC -DCMAKE_BUILD_TYPE=Release ../src
+  cmake -DQMC_MPI=1 -DCMAKE_CXX_COMPILER=CC -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment ../src
   make -j16
 }
 run() {

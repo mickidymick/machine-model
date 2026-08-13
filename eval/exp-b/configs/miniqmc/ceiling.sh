@@ -30,7 +30,8 @@ build() {
   module load craype-x86-trento 2>/dev/null || true
   module load cmake 2>/dev/null || true
   mkdir -p build && cd build
-  cmake -DQMC_MPI=1 -DCMAKE_CXX_COMPILER=CC -DCMAKE_BUILD_TYPE=Release ../src
+  cmake -DQMC_MPI=1 -DCMAKE_CXX_COMPILER=CC -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment ../src
   make -j16
 }
 run() {

@@ -196,3 +196,19 @@ arm that tripped over one would add variance unrelated to the hypothesis.
 Equal work is now also checked automatically from the application's own output:
 `FOM x time / nelec^3` recovers ranks x walkers independently, and `collect.py`
 SUPPRESSES the arm comparison if the configs did different work.
+
+## Build requirements given to both arms (2026-08-13)
+
+Three miniQMC build facts are stated in PROBLEM.md rather than left as traps:
+`-DQMC_MPI=1` (off by default; without it every rank runs the whole problem
+serially and nothing says so), `-w` explicit (walkers otherwise default to
+thread count, which is round 1's failure exactly), and
+`-DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment` (without it CMake's FindMPI does not
+recognise the Cray `CC` wrapper and configuration fails outright -- found when
+the reference configs failed to build on Frontier).
+
+The last one is arguably machine knowledge a web-capable agent could find, so
+supplying it removes a small discriminator. It is supplied anyway: an arm that
+fails to configure produces no data point at all, and losing an arm to a build
+detail would be variance with nothing to do with the hypothesis. Declared here
+rather than quietly, because it does slightly favour the no-artifact arm.

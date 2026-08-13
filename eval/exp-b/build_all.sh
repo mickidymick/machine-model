@@ -43,10 +43,18 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
   # function that does not exist in a non-interactive subshell -- one arm
   # happened to source it and the other did not, which is an environment
   # difference that has nothing to do with the arms.
+  # Keep the FULL log. `tail -5` alone discarded the actual cmake error and
+  # left only its closing advice, which read like the whole message.
+  mkdir -p "$D/results"
+  blog="$D/results/build_${BENCH}_${name}.log"
   ( cd "$tree" || exit 1
     source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
-    bash "$cfg" build ) 2>&1 | tail -5
-  echo "    exit=$?"
+    bash "$cfg" build ) > "$blog" 2>&1
+  rc=$?
+  # NOT `echo $?` after a pipeline: that reports tail's status, which is always
+  # 0, so every failed build announced success.
+  tail -5 "$blog"
+  echo "    exit=$rc   full log: $blog"
 done
 
 echo

@@ -18,6 +18,9 @@ I care only about how long it takes.
   in this CMakeLists. Without it the binary still builds and runs, but every
   rank runs the whole problem independently -- `srun -n16` becomes 16 separate
   serial copies rather than one 16-rank job, and nothing in the output says so.
+- **Frontier is a Cray system: pass `-DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment`
+  to cmake as well.** Without it CMake's `FindMPI` does not recognise the `CC`
+  wrapper as an MPI compiler and configuration fails outright.
 - **You must pass `-w` explicitly.** If you omit it, miniQMC defaults the walker
   count to `omp_get_max_threads()` (src/Drivers/miniqmc.cpp), which would make
   the amount of work depend on your thread count and break the comparison.
