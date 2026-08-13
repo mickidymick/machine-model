@@ -3,8 +3,12 @@
 #SBATCH -N 4
 #SBATCH -t 02:00:00
 #SBATCH -p batch
-#SBATCH -o results/expb_%j.out
-#SBATCH -e results/expb_%j.err
+#
+# -o/-e are relative to the SUBMIT directory (~/machine-model) and Slurm
+# resolves them BEFORE the script runs, so a mkdir inside the script cannot
+# create them in time. Submit from the repo root.
+#SBATCH -o eval/exp-b/results/expb_%j.out
+#SBATCH -e eval/exp-b/results/expb_%j.err
 #
 # Experiment B: do configurations derived WITH the artifact run faster than
 # configurations derived WITHOUT it?

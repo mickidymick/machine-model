@@ -3,7 +3,11 @@
 #SBATCH -N 4
 #SBATCH -t 00:20:00
 #SBATCH -p batch
-#SBATCH -o results/size_%j.out
+#
+# -o/-e are relative to the SUBMIT directory (~/machine-model) and Slurm
+# resolves them BEFORE the script runs, so a mkdir inside the script cannot
+# create them in time. Submit from the repo root.
+#SBATCH -o eval/exp-b/results/size_%j.out
 #
 # Run BEFORE the real job. Times ONE ceiling run to check the problem is sized
 # so that n=10 is affordable.
