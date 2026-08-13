@@ -337,37 +337,42 @@ def _report_decomposition(stats, by):
     "a couple of percent" -- the same order as the placement effect under test.
     Without subtracting it, a win cannot be attributed to the artifact at all.
     """
-    a, b, c = 'no-artifact', 'with-artifact', 'with-artifact-notcoarse'
-    if c not in stats or b not in stats:
+    a, b, c = 'no-artifact', 'with-artifact', 'no-artifact-hugepages'
+    if c not in stats or a not in stats:
         return
     print()
-    print("DECOMPOSITION -- isolating `-t coarse` (with-artifact passes it, no-artifact does not)")
-    eff = stats[c]['mean'] - stats[b]['mean']
-    t, dof, p = welch(by[c], by[b])
-    print(f"  with-artifact-notcoarse {stats[c]['mean']:.2f} +/- {stats[c]['sd']:.3f}")
-    print(f"  with-artifact           {stats[b]['mean']:.2f} +/- {stats[b]['sd']:.3f}")
-    print(f"  -t coarse is worth: {eff:+.2f}s ({100*eff/stats[c]['mean']:+.1f}%)"
+    print("DECOMPOSITION -- isolating craype-hugepages2M")
+    print("  The arms converged on the same geometry (8x7x7), the same -t coarse,")
+    print("  the same -march=znver3 and the same compiler. They differ on huge")
+    print("  pages: no-artifact CONSIDERED AND REJECTED the module (\"bandwidth-")
+    print("  bound, not TLB-latency-bound... payoff is small\"); with-artifact took")
+    print("  it, citing the measured 2.4x penalty at a ~32 MB working set.")
+    print()
+    eff = stats[a]['mean'] - stats[c]['mean']
+    t, dof, p = welch(by[a], by[c])
+    print(f"  no-artifact            {stats[a]['mean']:.2f} +/- {stats[a]['sd']:.3f}")
+    print(f"  no-artifact+hugepages  {stats[c]['mean']:.2f} +/- {stats[c]['sd']:.3f}")
+    print(f"  huge pages alone are worth: {eff:+.2f}s ({100*eff/stats[a]['mean']:+.1f}%)"
           + (f"   p={p:.4g}" if p is not None else ""))
-    if a not in stats:
+    if b not in stats:
         return
     gap = stats[a]['mean'] - stats[b]['mean']
-    corrected = stats[a]['mean'] - stats[c]['mean']
     print()
-    print(f"  raw arm gap            {gap:+.2f}s ({100*gap/stats[a]['mean']:+.1f}%)")
-    print(f"  gap NET of -t coarse   {corrected:+.2f}s "
-          f"({100*corrected/stats[a]['mean']:+.1f}%)   <- compare no-artifact to notcoarse")
-    ta, da, pa = welch(by[a], by[c])
-    if pa is not None:
-        print(f"  net gap: Welch t={ta:.3f}, dof={da:.1f}, p={pa:.4g}"
-              f"{'  SIGNIFICANT' if pa < 0.05 else '  NULL'}")
-    if p is not None and pa is not None and p < 0.05 and pa >= 0.05:
-        print("  -> The raw gap is carried by the timer flag, not by the artifact.")
-        print("     Report the net comparison; the headline number is the null.")
-    print()
-    print("  Note this leaves the geometries still differing in several ways")
-    print("  (8 ranks/node on L3 boundaries vs 4 on NUMA domains, wait policy,")
-    print("  cpu-bind mode). `-t coarse` is isolated because it was the one")
-    print("  difference with no machine content at all.")
+    print(f"  full arm gap                 {gap:+.2f}s ({100*gap/stats[a]['mean']:+.1f}%)")
+    print(f"  explained by huge pages      {eff:+.2f}s ({100*eff/max(abs(gap),1e-9):.0f}% of the gap)")
+    resid = gap - eff
+    print(f"  residual (everything else)   {resid:+.2f}s")
+    tr, dr, pr = welch(by[c], by[b])
+    if pr is not None:
+        print(f"  residual: Welch t={tr:.3f}, dof={dr:.1f}, p={pr:.4g}"
+              f"{'  SIGNIFICANT' if pr < 0.05 else '  NULL'}")
+        if pr >= 0.05 and p is not None and p < 0.05:
+            print("  -> The gap is the huge-page decision and nothing else. The")
+            print("     artifact's contribution on this benchmark is ONE measured")
+            print("     fact, and that is exactly what should be claimed.")
+        elif pr < 0.05:
+            print("  -> Something beyond huge pages also differs (OMP_PLACES, BLAS")
+            print("     linkage). Do not attribute the residual without isolating it.")
 
 
 # ----------------------------------------------------------------------- svg
