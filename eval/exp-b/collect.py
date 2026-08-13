@@ -283,6 +283,7 @@ def main(path, svg_out=None):
     # ---- the arm comparison, which is the actual question ----
     a, b = 'no-artifact', 'with-artifact'
     if a in by and b in by and not work_ok:
+        _report_decomposition(stats, by)
         print("ARM COMPARISON: SUPPRESSED -- the arms did different amounts of")
         print("work (see the equal-work check above). A number here would be")
         print("read as a result, so none is printed.")
@@ -321,9 +322,52 @@ def main(path, svg_out=None):
     else:
         print("ARM COMPARISON: both arms not present in this CSV.")
 
+    _report_decomposition(stats, by)
+
     if svg_out:
         write_svg(stats, svg_out)
         print(f"\nwrote {svg_out}")
+
+
+def _report_decomposition(stats, by):
+    """Isolate `-t coarse`, which only the with-artifact arm passes.
+
+    That flag drops miniQMC's per-electron timer instrumentation. It is an
+    APPLICATION knob, not machine knowledge, and the arm itself estimated it at
+    "a couple of percent" -- the same order as the placement effect under test.
+    Without subtracting it, a win cannot be attributed to the artifact at all.
+    """
+    a, b, c = 'no-artifact', 'with-artifact', 'with-artifact-notcoarse'
+    if c not in stats or b not in stats:
+        return
+    print()
+    print("DECOMPOSITION -- isolating `-t coarse` (with-artifact passes it, no-artifact does not)")
+    eff = stats[c]['mean'] - stats[b]['mean']
+    t, dof, p = welch(by[c], by[b])
+    print(f"  with-artifact-notcoarse {stats[c]['mean']:.2f} +/- {stats[c]['sd']:.3f}")
+    print(f"  with-artifact           {stats[b]['mean']:.2f} +/- {stats[b]['sd']:.3f}")
+    print(f"  -t coarse is worth: {eff:+.2f}s ({100*eff/stats[c]['mean']:+.1f}%)"
+          + (f"   p={p:.4g}" if p is not None else ""))
+    if a not in stats:
+        return
+    gap = stats[a]['mean'] - stats[b]['mean']
+    corrected = stats[a]['mean'] - stats[c]['mean']
+    print()
+    print(f"  raw arm gap            {gap:+.2f}s ({100*gap/stats[a]['mean']:+.1f}%)")
+    print(f"  gap NET of -t coarse   {corrected:+.2f}s "
+          f"({100*corrected/stats[a]['mean']:+.1f}%)   <- compare no-artifact to notcoarse")
+    ta, da, pa = welch(by[a], by[c])
+    if pa is not None:
+        print(f"  net gap: Welch t={ta:.3f}, dof={da:.1f}, p={pa:.4g}"
+              f"{'  SIGNIFICANT' if pa < 0.05 else '  NULL'}")
+    if p is not None and pa is not None and p < 0.05 and pa >= 0.05:
+        print("  -> The raw gap is carried by the timer flag, not by the artifact.")
+        print("     Report the net comparison; the headline number is the null.")
+    print()
+    print("  Note this leaves the geometries still differing in several ways")
+    print("  (8 ranks/node on L3 boundaries vs 4 on NUMA domains, wait policy,")
+    print("  cpu-bind mode). `-t coarse` is isolated because it was the one")
+    print("  difference with no machine content at all.")
 
 
 # ----------------------------------------------------------------------- svg
