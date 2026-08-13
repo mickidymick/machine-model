@@ -47,9 +47,14 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
   # left only its closing advice, which read like the whole message.
   mkdir -p "$D/results"
   blog="$D/results/build_${BENCH}_${name}.log"
+  # Install the config INTO the tree and run it from there. The arms resolve
+  # their paths from `dirname "${BASH_SOURCE[0]}"` -- which is correct, because
+  # task.md told them the source is in their directory. Exec'ing them out of
+  # configs/ pointed SRC_DIR at configs/miniqmc/src, which does not exist.
+  cp "$cfg" "$tree/SOLUTION.sh"
   ( cd "$tree" || exit 1
     source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
-    bash "$cfg" build ) > "$blog" 2>&1
+    bash ./SOLUTION.sh build ) > "$blog" 2>&1
   rc=$?
   # NOT `echo $?` after a pipeline: that reports tail's status, which is always
   # 0, so every failed build announced success.

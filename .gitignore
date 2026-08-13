@@ -17,3 +17,4 @@ eval/exp-b/pristine/
 eval/exp-b/arms/*/*/src/
 eval/exp-b/arms/*/*/build/
 eval/exp-b/results/*.log
+eval/exp-b/arms/*/*/SOLUTION.sh

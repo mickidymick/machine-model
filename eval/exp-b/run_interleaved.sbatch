@@ -65,6 +65,9 @@ for p in $(seq 1 "$PASSES"); do
     if [ ! -d "$tree" ]; then
       echo "    $name: NO TREE -- skipped"; continue
     fi
+    # Same as build_all.sh: the config runs from inside its own tree, because
+    # the arms resolve paths relative to the script's own location.
+    cp "$cfg" "$tree/SOLUTION.sh"
     ( cd "$tree" || exit 1
       source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
       # No separate machine probe. The previous one ran its own
@@ -74,7 +77,7 @@ for p in $(seq 1 "$PASSES"); do
       # The application reports ranks, threads and walkers itself; that is the
       # only verification that actually distinguishes one config from another.
       t0=$(date +%s.%N)
-      bash "$cfg" run > "$ABSOUT/${BENCH}_${name}_p${p}_${STAMP}.log" 2>&1
+      bash ./SOLUTION.sh run > "$ABSOUT/${BENCH}_${name}_p${p}_${STAMP}.log" 2>&1
       rc=$?
       t1=$(date +%s.%N)
       secs=$(echo "$t1 - $t0" | bc)
