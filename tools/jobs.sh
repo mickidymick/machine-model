@@ -57,6 +57,20 @@ show_one() {
 
   [ "$QUIET" = 1 ] && return
 
+  # A queued job has not written anything yet, and saying so is different from
+  # saying the output is missing. Also show when Slurm expects to start it.
+  case "${state:-}" in
+    PENDING|CONFIGURING|SUSPENDED)
+      local start
+      start=$(squeue -j "$id" -h -o '%S' 2>/dev/null)
+      local why
+      why=$(squeue -j "$id" -h -o '%r' 2>/dev/null)
+      printf '  queued (%s) -- nothing written yet' "${why:-waiting}"
+      [ -n "${start:-}" ] && [ "$start" != "N/A" ] && printf ', est. start %s' "$start"
+      printf '\n'
+      return ;;
+  esac
+
   local f
   f=$(stdout_of "$id")
   if [ -z "$f" ] || [ ! -f "$f" ]; then
