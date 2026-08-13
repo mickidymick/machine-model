@@ -17,9 +17,12 @@ BENCH=$1; LOG=$2
 r=NA; w=NA; th=NA
 case "$BENCH" in
   miniqmc)
-    # "Total" is both a timer row and the "Total throughput" line -- require the
-    # numeric timer columns so throughput cannot match.
-    t=$(awk '$1=="Total" && NF>=5 {print $2; exit}' "$LOG")
+    # "Total" is both a timer row and the "Total throughput" line, and BOTH have
+    # >=5 fields -- NF alone does not separate them. Require $2 to be a number:
+    # the timer row has 28.7956 there, the throughput line has the word
+    # "throughput". The earlier version got the right answer only because the
+    # timer row happens to print first and awk exits on the first match.
+    t=$(awk '$1=="Total" && $2 ~ /^[0-9]+(\.[0-9]+)?$/ {print $2; exit}' "$LOG")
     f=$(awk '/^Total throughput/{print $NF; exit}' "$LOG")
     r=$(awk  -F'= ' '/MPI processes/{print $2; exit}'      "$LOG" | tr -dc '0-9')
     w=$(awk  -F'= ' '/walkers per rank/{print $2; exit}'   "$LOG" | tr -dc '0-9')
