@@ -2,34 +2,29 @@
 # CEILING -- hand-tuned from everything this project has measured. Not an arm;
 # a reference for how much headroom exists.
 #
-# 16 ranks (4 nodes x 4) x 14 walkers = 224 total walkers, per PROBLEM.md.
+# 1 node, 4 ranks x 14 walkers = 56 total walkers, per PROBLEM.md.
 #
 # Every choice traces to a claim:
 #   craype-hugepages2M  cost.page_size_penalty -- 2.4x at a ~32 MiB working set.
 #                       It RELINKS, so it is a build-time decision; THP is
-#                       [never] here and the hugetlb pool is empty, so nothing
-#                       else yields 2 MB pages. Loaded at run time too, because
-#                       HUGETLB_* in the environment is what backs the heap.
+#                       [never] here and the hugetlb pool is empty. Loaded at run
+#                       time too: HUGETLB_* in the environment backs the heap.
 #   -c 14               cpu.core_inventory -- 8 cores OS-reserved, 56 usable,
-#                       56/4 = 14. `-c 64` is rejected outright. -c 14 is also
-#                       what makes MPICH_OFI_NIC_POLICY=NUMA legal at all.
+#                       56/4 = 14. `-c 64` is rejected outright.
 #   4 ranks/node        one rank per NUMA domain. numa.distance_matrix measured
 #                       107.9/115.8/119.2 ns against 101.5 local; the ACPI SLIT
-#                       declares them flat and is wrong.
-#   NIC_POLICY=NUMA     net.nic_inventory -- 4 NICs, one per domain. Our own
-#                       control showed the policy is worth 0.13%; spreading
-#                       ranks across domains is the whole effect. Set because it
-#                       is free, not because it is large.
-#   --threads-per-core=1  UNMEASURED -- flagged as the one choice here with no
-#                       measurement behind it.
+#                       declares them flat and is wrong. The 750 MB spline table
+#                       is first-touched by each rank's master thread, so a rank
+#                       spanning domains reads it remotely.
+#   --threads-per-core=1  UNMEASURED -- the one choice here with no measurement
+#                       behind it. There are exactly 56 walkers for 56 cores, so
+#                       a second hardware thread has no walker to run.
+#
+# No MPI or NIC tuning: miniQMC makes no communication call inside the timed
+# region, so net.nic_inventory does not apply to this code.
 build() {
-  # PrgEnv-gnu: miniQMC has no CrayCompilers.cmake and Frontier defaults to
-  # PrgEnv-cray, which sets no compiler flags and fails to build.
   module load PrgEnv-gnu
   module load craype-hugepages2M
-  # craype-x86-trento targets the EPYC 7A53 compute nodes; the login nodes are
-  # 7763. Both are Zen 3, but the module is the Cray-idiomatic way to say so and
-  # is safer than hand-passing -march= through whichever PrgEnv is default.
   module load craype-x86-trento 2>/dev/null || true
   module load cmake 2>/dev/null || true
   mkdir -p build && cd build
@@ -38,19 +33,16 @@ build() {
   make -j16
 }
 run() {
-  module load PrgEnv-gnu          # same environment the binary was built in
+  module load PrgEnv-gnu
   module load craype-hugepages2M
   export HUGETLB_VERBOSE=2
   export OMP_NUM_THREADS=14 OMP_PROC_BIND=close OMP_PLACES=cores
-  export MPICH_OFI_NIC_POLICY=NUMA
-  srun -N4 -n16 --ntasks-per-node=4 -c14 --threads-per-core=1 \
+  export OMP_MAX_ACTIVE_LEVELS=1
+  srun -N1 -n4 --ntasks-per-node=4 -c14 --threads-per-core=1 \
        --cpu-bind=cores --distribution=block:block \
        ./build/bin/miniqmc -g "2 2 2" -n 5 -w 14
 }
 
-# Same CLI the agents' own scripts expose, so the harness can exec every config
-# identically instead of sourcing it. Sourcing meant editing the agent's script
-# before running it -- task.md promises "I will execute it as-is".
 case "${1:-}" in
   build) build ;;
   run)   run ;;

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J exp-b
-#SBATCH -N 4
+#SBATCH -N 1
 #SBATCH -t 00:45:00
 #
 # 45 minutes, not 2 hours. 5 configs x 10 passes x ~34 s measured = ~28 min, and

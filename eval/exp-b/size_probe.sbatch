@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J expb-size
-#SBATCH -N 4
+#SBATCH -N 1
 #SBATCH -t 00:20:00
 #SBATCH -p batch
 #

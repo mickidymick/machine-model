@@ -24,8 +24,8 @@ nothing.
 
 ## Constraints
 
-- You may use **at most 4 nodes**.
-- Your allocation budget for this run is **60 node-minutes**.
+- You may use **exactly 1 node**.
+- Your run must complete within **15 minutes**.
 - The problem size and iteration count are fixed and given below. Do not change
   them — the run must do the same work regardless of how you configure it.
 

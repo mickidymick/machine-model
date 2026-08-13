@@ -241,3 +241,33 @@ produce no data point. `build_all.sh` reports NO BINARY rather than a time, so
 that failure is loud. If it happens it gets reported as an arm failure, not
 quietly re-run until it works -- re-rolling a failed arm until it succeeds would
 select for the outcome we want.
+
+## Allocation cut from 4 nodes to 1, before any timing (2026-08-13)
+
+The 4-node limit was inherited from the AMG task design and never re-examined
+against miniQMC. It should have been.
+
+miniQMC calls MPI only for `MPI_Init`/`Comm_rank`/`Comm_size`. There is no
+communication inside the timed region, the reported `Total` is one rank's wall
+clock, and every node is loaded identically and independently. **Three of the
+four nodes therefore did work that never entered the measured number**, while
+adding queue wait, allocation cost, and node-to-node variability -- which
+[[frontier-2026-08-10-results]] already lists as this machine's biggest
+unquantified noise source.
+
+At 1 node the total walker count is 56, one per allocatable core. Both arms'
+round-2 geometries survive the change (8 ranks x 7 on L3 boundaries, 4 x 14 on
+NUMA domains), and the floor becomes almost exactly ZeroSum's published
+baseline: one node, 8 ranks, 7 OpenMP threads, no `-c`. That makes their
+63.67 s -> 27.33 s ladder directly comparable to ours rather than merely
+analogous.
+
+The 4-node configs are archived unrun in `results/round2-4node-superseded/`.
+They are kept because both arms independently derived the no-communication
+property and declined to use the network -- with-artifact explicitly dismissed
+the entire Slingshot section of the briefing as inapplicable. That is the
+artifact being used correctly by NOT being used, and it is worth reporting.
+
+**This changes nothing about the predictions.** The comparison remains
+no-artifact vs with-artifact on intra-node placement, which is where the
+artifact-only content was always concentrated.
