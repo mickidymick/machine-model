@@ -52,3 +52,147 @@ Not a failure. It would say the artifact's value is **concentrated where the
 public record is silent**, and on the GPU side much of it is not. That is more
 useful than a uniform win: it says where to point the next machine's
 characterization, and it is a claim we can defend.
+
+## Model and context, recorded before any result (2026-08-13)
+
+Experiment A ran on **Opus 4.8, effort High**, via Jeff's `claude` CLI. The
+Experiment B arms run on whatever Claude Code defaults to, which on 2026-08-13
+is **Opus 5 with a 1M context window**. This is noted now rather than after the
+numbers exist.
+
+**It does not threaten B's internal validity.** The comparison is between two
+arms of B, and both arms are the same model in the same harness -- the arms
+differ in one file. What it does forbid is arithmetic *across* experiments:
+no subtracting an A score from a B result, and no claim that the artifact's
+value "grew" or "shrank" between them.
+
+**Both arms must be on the same model, and it must be recorded.** Different
+defaults in the two sessions would be a genuine confound, and it is exactly the
+kind that reports as a plausible number rather than an error. Each arm's model
+and context are captured into its `SOLUTION.sh` header at collection time.
+
+**Direction of the expected bias.** A stronger model with a larger context is a
+*more capable no-artifact arm*: better recall of Cray defaults, more room to
+read the benchmark source. So it should make the artifact's measured advantage
+**smaller**, not larger. Under that bias a win is conservative and worth more
+than the same win on a weaker model. A null is correspondingly weaker evidence
+-- it would not distinguish "the artifact adds nothing" from "this model already
+knew it," and settling that would need a rerun on the A-era model.
+
+## Amendment, before round 2 (2026-08-13) -- two decisions taken after seeing round 1's configs but before any timing
+
+Round 1 produced configurations but no timings; it was voided because the spec
+left total work free. See `results/round1-voided/`. Two choices made now, in the
+open, because both were prompted by reading round 1:
+
+**1. The VMem leftovers STAY in the arm trees.** `src/vpage_llc_misses.out`,
+`src/working/` and `src/exe` are profiling residue from a different machine and
+a different problem. The round-1 no-artifact arm read one number out of them --
+86M minor page faults at 4 KB -- and cited it as corroboration for huge pages,
+which is exactly the pre-registered mechanism. The clean-experiment move is to
+delete them. **We are not deleting them**, because removing evidence that helped
+the CONTROL, after observing that it helped the control, biases the experiment
+toward our own hypothesis. Leaving them in makes the no-artifact arm stronger
+than it would otherwise be, so any surviving gap is conservative. The confound
+is declared rather than removed, and it must be reported alongside the result:
+if the artifact wins, it won against a control that had a page-fault count
+handed to it.
+
+**2. The falsifier is treated as fired.** Both arms relinked for huge pages
+without being told to. The pre-registration says that means "the artifact's
+largest CPU-side contribution is already public and the gap should close."
+Round 2 does not get to reinterpret that. If AMG comes back a null, the honest
+reading is that this prediction was wrong on this benchmark -- not that the
+experiment failed. What remains genuinely artifact-only on AMG is rank/NUMA
+geometry and the `-c 14` NIC-policy constraint, both smaller effects than the
+2.4x that was predicted to dominate.
+
+**Unchanged prediction, restated so it can still be scored:** with-artifact
+finishes faster than no-artifact on AMG. The mechanism now has to be placement,
+not pages.
+
+## Method adopted from ZeroSum, before round 2 runs (2026-08-13)
+
+Huck & Malony's ZeroSum paper (SC-W 2023) is the closest published precedent for
+this comparison, and it is also the paper whose unbuilt phase 2 this project
+exists to supply. Four things adopted from it:
+
+**1. n = 10 per condition, in one allocation, decided by a t-test.** Their
+sec 4.1 ran miniQMC ten times per condition and reported 27.3396 +/- 0.0358 s
+against 27.3395 +/- 0.1043 s, t-test p = 0.998 -- a null -- and separately
+57.0657 +/- 0.0486 vs 57.3409 +/- 0.1823, p = 0.0006, a real effect of 0.5%.
+A 0.13% run-to-run sd is what made a sub-1% decision possible. Our previous
+n = 3 with a "gap < 2x spread" heuristic could not have resolved anything of the
+size we now expect. `collect.py` does Welch (not Student, because ZeroSum's own
+two conditions differed ~3x in variance) and reports the minimum detectable
+effect whenever it returns a null, so "we found nothing" is distinguished from
+"nothing is there".
+
+**2. The floor is now the genuine naive default.** ZeroSum's baseline was
+`srun -n8` with `OMP_NUM_THREADS=7` and no `-c`, which puts seven threads on one
+core: 63.67 s against 27.33 s. The entire 2.33x in their paper is one missing
+flag. `floor.sh` reproduces that specific mistake on AMG. The old floor
+(`-N1 -n1`) was not the thing a user would actually type.
+
+**3. Results are reported as a four-point ladder,** floor / no-artifact /
+with-artifact / ceiling, not as a pairwise percentage.
+
+**4. This reframes what a win would even mean, and the reframing is not in our
+favour.** ZeroSum's ladder is: one documented flag worth 2.33x, then refined
+thread binding worth *nothing measurable* (27.33 -> 27.40 s, and they said so
+plainly). Our situation is the same shape -- huge pages are large and public,
+placement is artifact-only and small. **Both of our arms already clear
+ZeroSum's entire 2.33x**, because both knew about `-c` and core specialization.
+So the headline gap that paper demonstrates is not available to us, and the
+effect we are looking for sits in the band where ZeroSum measured a null.
+
+**Consequence for the claim, recorded now:** if AMG returns a null, that is
+consistent with the strongest published precedent rather than a failure of the
+experiment. It would bound the artifact's contribution to the region above what
+public documentation already delivers, which is exactly what
+[[machine-model-eval-result]] found for answers. The claim to defend is not
+"the artifact makes codes faster"; it is "the artifact is what distinguishes
+published from verified, and the runtime consequence of that on this machine is
+X" -- with X measured honestly, including if X is zero.
+
+## Benchmark switched to miniQMC, before round 2 runs (2026-08-13)
+
+**The primary benchmark is now miniQMC, not AMG.** Recorded before any round-2
+timing exists. Reasons, in order of weight:
+
+1. **AMG has no GPU path at all** — no HIP/CUDA in the tree — so die parity, the
+   GCD/NUMA map and host-device transfer, the most artifact-only facts we hold,
+   are untestable on it.
+2. **AMG's second-largest lever is an application property, not a machine one.**
+   hypre threads poorly and flat MPI is standard practice; a machine document
+   can only mislead there. Round 1's arms split exactly along that line (224
+   flat ranks vs 16x14 threaded).
+3. **miniQMC is ZeroSum's own benchmark on this machine.** We are building the
+   phase 2 they declined to build, so their ladder (63.67 -> 27.33 -> 27.40 s)
+   becomes a published reference our floor can be checked against.
+4. It is the ECP proxy for QMCPACK, has CPU-only and OMP_offload builds so one
+   benchmark covers both arms, and runs in ~30 s -- which is what makes n=10
+   affordable at all. Full QMCPACK being pre-built is not an advantage: the arms
+   must control their own builds because craype-hugepages2M relinks.
+
+**Predictions carried over unchanged, restated for miniQMC so they can still be
+scored:** with-artifact finishes faster than no-artifact; the mechanism has to
+be placement rather than pages, since round 1 showed both arms relinking; and
+neither arm should need more than the 4-node budget.
+
+**One confound does NOT carry over.** The VMem residue that fed the round-1
+no-artifact arm an 86M-minor-page-fault count lived in the AMG tree. miniQMC is
+a clean upstream clone, so round 2 has no such leakage in either arm. This
+removes a declared confound rather than hiding one -- but it also means a
+no-artifact arm that still derives huge pages did so with less help than in
+round 1, which strengthens rather than weakens that finding.
+
+**Two spec traps found by reading the source before writing the spec** (round 1
+taught this): miniQMC defaults walkers to `omp_get_max_threads()`, so work would
+otherwise follow thread count; and `QMC_MPI` defaults to 0, so a build without
+`-DQMC_MPI=1` silently runs every rank as an independent serial copy. Both are
+stated in PROBLEM.md for both arms, because neither is a machine fact and an
+arm that tripped over one would add variance unrelated to the hypothesis.
+Equal work is now also checked automatically from the application's own output:
+`FOM x time / nelec^3` recovers ranks x walkers independently, and `collect.py`
+SUPPRESSES the arm comparison if the configs did different work.

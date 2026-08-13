@@ -7,3 +7,13 @@ render.err
 
 __pycache__/
 *.pyc
+
+# Experiment B: benchmark source is fetched at a pinned commit by
+# eval/exp-b/setup_bench.sh, never committed. Vendoring it created nested .git
+# directories git cannot track and would put ~100 MB of third-party code in a
+# repo whose content is the harness.
+eval/exp-b/pristine-miniqmc/
+eval/exp-b/pristine/
+eval/exp-b/arms/*/*/src/
+eval/exp-b/arms/*/*/build/
+eval/exp-b/results/*.log

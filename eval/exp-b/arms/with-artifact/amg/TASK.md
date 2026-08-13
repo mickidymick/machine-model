@@ -17,11 +17,6 @@ constraints below, and give me:
 Write both into `SOLUTION.sh` in this directory, as a runnable script with a
 `build()` function and a `run()` function. I will execute it as-is.
 
-`SOLUTION.sh` **must dispatch on its first argument**: `bash SOLUTION.sh build`
-runs the build, `bash SOLUTION.sh run` runs the benchmark. I invoke it exactly
-that way — a script that only defines the functions would exit having done
-nothing.
-
 ## Constraints
 
 - You may use **at most 4 nodes**.
