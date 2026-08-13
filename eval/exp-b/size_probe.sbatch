@@ -30,7 +30,8 @@ log="$D/results/size_${BENCH}_${SLURM_JOB_ID}.log"
 ( cd "$tree" || exit 1
   source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
   t0=$(date +%s.%N)
-  bash "$D/configs/$BENCH/ceiling.sh" run > "$log" 2>&1
+  cp "$D/configs/$BENCH/ceiling.sh" ./SOLUTION.sh
+  bash ./SOLUTION.sh run > "$log" 2>&1
   rc=$?
   t1=$(date +%s.%N)
   echo "=== exit=$rc  wall=$(echo "$t1 - $t0" | bc) s ==="

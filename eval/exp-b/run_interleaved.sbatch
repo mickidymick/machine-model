@@ -41,8 +41,20 @@ STAMP=$(date +%Y%m%d_%H%M%S)
 D=$(cd "$D" && pwd)          # absolute -- configs are exec'd after a cd
 ABSOUT=$(cd "$OUT" && pwd)   # so relative paths would escape
 
+# SNAPSHOT the configs and the parser at job start, and use only the snapshot.
+# Both are read on EVERY pass, so a `git pull` while this job is running would
+# otherwise leave early passes and late passes executing different code, averaged
+# into a single mean with nothing in the CSV to show it. The batch script itself
+# is already immune -- Slurm spools a copy at submission.
+SNAP="$ABSOUT/snapshot_${BENCH}_${STAMP}"
+mkdir -p "$SNAP"
+cp -r "$D/configs/$BENCH" "$SNAP/configs"
+cp "$D/parse_run.sh" "$SNAP/parse_run.sh"
+chmod +x "$SNAP/parse_run.sh"
+echo "configs snapshotted to $SNAP -- a git pull during this run cannot affect it"
+
 CONFIGS=()
-for c in "$D/configs/$BENCH"/*.sh; do CONFIGS+=("$c"); done
+for c in "$SNAP/configs"/*.sh; do CONFIGS+=("$c"); done
 [ ${#CONFIGS[@]} -gt 0 ] || { echo "no configs in $D/configs/$BENCH" >&2; exit 1; }
 
 echo "=== exp-b: $BENCH, ${#CONFIGS[@]} configs, $PASSES passes, job $SLURM_JOB_ID ==="
@@ -90,7 +102,7 @@ for p in $(seq 1 "$PASSES"); do
       # craype-hugepages2M pay the module cost, and that penalty lands on
       # exactly the configs expected to be fastest.
       log="$ABSOUT/${BENCH}_${name}_p${p}_${STAMP}.log"
-      parsed=$("$D/parse_run.sh" "$BENCH" "$log")
+      parsed=$("$SNAP/parse_run.sh" "$BENCH" "$log")
       solve=$(echo "$parsed" | cut -d, -f1)
       fom=$(echo   "$parsed" | cut -d, -f2)
       work=$(echo  "$parsed" | cut -d, -f3)
