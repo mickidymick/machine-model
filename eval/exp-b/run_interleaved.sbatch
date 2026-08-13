@@ -1,7 +1,12 @@
 #!/bin/bash
 #SBATCH -J exp-b
 #SBATCH -N 4
-#SBATCH -t 02:00:00
+#SBATCH -t 00:45:00
+#
+# 45 minutes, not 2 hours. 5 configs x 10 passes x ~34 s measured = ~28 min, and
+# Slurm backfills a short job into gaps a long one cannot fit. Asking for 2 h on
+# the smallest node bin pushed the estimated start out by five hours for a job
+# that runs in half an hour. Raise this if PASSES or the config count grows.
 #SBATCH -p batch
 #
 # -o/-e are relative to the SUBMIT directory (~/machine-model) and Slurm
