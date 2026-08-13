@@ -10,6 +10,13 @@
 # -DQMC_MPI=1 and -DCMAKE_CXX_COMPILER=CC are not tuning: without them the build
 # is serial and every rank would run the whole problem independently.
 build() {
+  # PrgEnv-gnu, not the site default. Frontier defaults to PrgEnv-cray, and
+  # miniQMC has NO CrayCompilers.cmake -- CMakeLists recognises COMPILER Cray
+  # then warns "No default file for compiler" and sets no flags at all, so the
+  # build dies in NewTimer.cpp. GNU is the best-supported path (GNUCompilers
+  # .cmake exists). This is a build necessity, not tuning: the floor is naive
+  # about placement and page size, not about compiling at all.
+  module load PrgEnv-gnu
   module load cmake 2>/dev/null || true   # present on some systems, not all
   mkdir -p build && cd build
   # If cmake cannot find LAPACK, cray-libsci is what provides it on this

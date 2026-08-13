@@ -212,3 +212,32 @@ supplying it removes a small discriminator. It is supplied anyway: an arm that
 fails to configure produces no data point at all, and losing an arm to a build
 detail would be variance with nothing to do with the hypothesis. Declared here
 rather than quietly, because it does slightly favour the no-artifact arm.
+
+## The line between "build requirement" and "tuning decision" (2026-08-13)
+
+Frontier defaults to PrgEnv-cray, and miniQMC has no `CrayCompilers.cmake` --
+CMakeLists recognises `COMPILER Cray`, warns "No default file for compiler", and
+sets no flags at all, so the build fails in NewTimer.cpp. The reference configs
+now load PrgEnv-gnu.
+
+**This is deliberately NOT added to PROBLEM.md.** The rule being applied:
+
+> State a build requirement in the spec when it has **no performance
+> consequence**. Leave anything that could change the speed to the arms.
+
+`-DQMC_MPI=1`, `-w`, and `-DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment` are in the
+spec because each is binary -- the run is either correct or meaningless, and no
+choice among them is faster. **Compiler choice is not like that.** PrgEnv-gnu
+vs PrgEnv-amd is a real performance decision on this machine, and handing it
+over would delete a legitimate discriminator.
+
+The evidence says the arms can find it: in round 1 BOTH arms loaded a
+non-default PrgEnv unprompted (no-artifact chose PrgEnv-amd, with-artifact
+PrgEnv-gnu), and task.md already tells them to read the source, where the
+missing CrayCompilers.cmake is visible in CMake/.
+
+**Accepted risk:** an arm that leaves the default PrgEnv will fail to build and
+produce no data point. `build_all.sh` reports NO BINARY rather than a time, so
+that failure is loud. If it happens it gets reported as an arm failure, not
+quietly re-run until it works -- re-rolling a failed arm until it succeeds would
+select for the outcome we want.

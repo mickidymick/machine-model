@@ -23,6 +23,9 @@
 #   --threads-per-core=1  UNMEASURED -- flagged as the one choice here with no
 #                       measurement behind it.
 build() {
+  # PrgEnv-gnu: miniQMC has no CrayCompilers.cmake and Frontier defaults to
+  # PrgEnv-cray, which sets no compiler flags and fails to build.
+  module load PrgEnv-gnu
   module load craype-hugepages2M
   # craype-x86-trento targets the EPYC 7A53 compute nodes; the login nodes are
   # 7763. Both are Zen 3, but the module is the Cray-idiomatic way to say so and
@@ -35,6 +38,7 @@ build() {
   make -j16
 }
 run() {
+  module load PrgEnv-gnu          # same environment the binary was built in
   module load craype-hugepages2M
   export HUGETLB_VERBOSE=2
   export OMP_NUM_THREADS=14 OMP_PROC_BIND=close OMP_PLACES=cores
