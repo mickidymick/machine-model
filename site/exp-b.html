@@ -637,9 +637,10 @@
 
   <section id="inventory">
     <h2>What is actually in the artifact</h2>
-    <p>Sixteen claims, one schema, the same questions asked of every machine. Each
+    <p>One schema, the same fixed questions asked of every machine. Each claim
     carries a <b>verdict</b> &mdash; how the machine&rsquo;s own description held up against
-    measurement. Empty slots are expected and are part of the record.</p>
+    measurement. The fifteen resolved on this node are below; empty slots are
+    expected and are part of the record.</p>
     <div class="vgroup measured">
       <div class="vhead"><span class="vname">confirmed</span><span class="vcount">4</span></div>
       <p class="vblurb">The machine tells the truth. This is the control &mdash; without it, &ldquo;firmware is unreliable&rdquo; would be an unfalsifiable complaint.</p>
@@ -683,13 +684,6 @@
       <p class="vblurb">We probed it and the probe could not discriminate. Recorded as such rather than quietly dropped.</p>
       <ul class="vlist">
         <li><code>gpu.numa_affinity</code><span>Drives <code>--gpu-bind=closest</code> and every host-buffer placement. Two probes failed to separate the domains.</span></li>
-      </ul>
-    </div>
-    <div class="vgroup muted">
-      <div class="vhead"><span class="vname">untested</span><span class="vcount">1</span></div>
-      <p class="vblurb">Known to matter, not yet measured. Listed so the gap is visible rather than implied.</p>
-      <ul class="vlist">
-        <li><code>cpu.system_interference</code><span>The question binding tools exist to answer: which resources to keep an application off.</span></li>
       </ul>
     </div>
     <p class="cap">Declared values are <b>never overwritten</b>; measured values sit
