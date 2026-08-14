@@ -4,6 +4,12 @@ Job 5257305, one node (frontier03766), 5 configs × 10 interleaved passes,
 50 timed runs, 0 failures. Raw: `results/miniqmc_20260813_161703.rebuilt.csv`.
 Timing is miniQMC's own `Total` row, not the harness stopwatch.
 
+> **Superseded in part.** Two statements below were corrected on 2026-08-14 by
+> the decomposition runs — see **ATTRIBUTION COMPLETE** at the end of this file.
+> The huge-page mechanism is *not* null: it accounts for 96% of the arm gap.
+> The residual is *not* unattributed: it is 0.03 s and null. The sections below
+> are kept as written because they record what was known at the time.
+
 ## The numbers
 
 | config | mean (s) | sd | sd % | position |
