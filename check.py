@@ -58,9 +58,22 @@ def main(argv):
     m = desc['machine']
     print(f"\n{C['b']}{m['system']} / {m['node_type']}{C['r']}  "
           f"{C['dim']}{m['facility']}  ---  characterized {m['characterized']}{C['r']}")
-    print(f"{C['dim']}registry {reg['registry_version']}  "
+    pinned = desc.get('registry_version')
+    current = reg['registry_version']
+    stale = pinned != current
+    print(f"{C['dim']}registry {current}  "
           f"schema {desc['schema_version']}  "
-          f"nodes sampled: {m.get('node_count', '?')}{C['r']}\n")
+          f"nodes sampled: {m.get('node_count', '?')}{C['r']}")
+    if stale:
+        # The pin records which registry the answers were made against. Printing
+        # the REGISTRY's own version here read as "these answers are current",
+        # which is precisely the kind of authoritative-looking, unchecked field
+        # this project exists to criticise. Flag it; do not silently update it --
+        # updating without re-reading the claims would launder a stale pin.
+        print(f"{C['dim']}  !! answers were recorded against registry {pinned}, "
+              f"registry is now {current}. Re-read the changed claims and bump "
+              f"the pin deliberately.{C['r']}")
+    print()
 
     # ---- 1. integrity -------------------------------------------------
     problems = []
