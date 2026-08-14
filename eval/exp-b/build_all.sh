@@ -97,6 +97,11 @@ echo "=== did the manipulation actually happen? ==="
 # report as "the arms performed the same", the wrong conclusion from right numbers.
 for cfg in "$D/configs/$BENCH"/*.sh; do
   name=$(basename "$cfg" .sh)
+  # Respect ONLY here too. Otherwise a config that was never requested, and
+  # will never run, blocks submission of a job that does not need it.
+  if [ -n "${ONLY:-}" ]; then
+    case " $ONLY " in *" $name "*) ;; *) continue ;; esac
+  fi
   bin=""   # must be set before the -x test; an unrecognised BENCH would
            # otherwise leave it unbound and crash the summary under `set -u`
   case "$BENCH" in
