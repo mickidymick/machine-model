@@ -293,3 +293,55 @@ The falsifier fired and is recorded as fired. The pre-registration's own clause
 applies: "If AMG comes back a null, the honest reading is that this prediction
 was wrong on this benchmark -- not that the experiment failed." That holds here
 in a stronger form, because the result is not a null but a loss.
+
+## Round 3 pre-registration: XSBench, the regime test (2026-08-13, before any run)
+
+Experiment B's loss has a stated explanation: our 2.4x page-size penalty was
+measured with a **pointer-chase** (dependent random access) and miniQMC
+**streams**, so a correct number was applied outside its regime. That
+explanation makes a prediction, and this is it, written down before testing.
+
+**XSBench** is the test. Monte Carlo neutron transport: binary search over a
+multi-GB cross-section table, described by its own README as involving "random
+memory accesses". It is the access pattern our measurement was taken under. It
+also has a `hip` variant, so it opens the GPU arm that AMG (no GPU path) and
+miniQMC (CPU-only tree) could not.
+
+**PREDICTIONS:**
+
+1. **Huge pages will matter on XSBench, and the artifact arm will win.** This is
+   the same mechanism that measured 0.2% and null on miniQMC. If the regime
+   explanation is right it should be large here.
+2. **The no-artifact arm will NOT reject the module this time.** Its miniQMC
+   reasoning was pattern-specific -- "streams 64 contiguous chunks... bandwidth-
+   bound, not TLB-latency-bound" -- and that argument does not survive contact
+   with a random binary search. If it rejects huge pages again, it is applying a
+   heuristic rather than reading the code, and that changes what Experiment B
+   showed about it.
+3. **The arms will diverge more than on miniQMC**, where they converged on
+   geometry and differed in almost nothing.
+
+**FALSIFIERS, and what each would mean:**
+
+- **The artifact arm loses again.** The regime explanation is wrong, or at least
+  incomplete, and the problem is deeper than context-travelling-with-the-number.
+  This is the outcome that would most change the project.
+- **Huge pages matter but BOTH arms take them.** Back to Experiment B round 1 on
+  AMG: the fact is publicly derivable and the artifact adds nothing on it.
+- **The artifact wins for a reason other than huge pages.** Report it, but the
+  regime prediction is unconfirmed; a one-knob decomposition decides it, as it
+  did here.
+
+**This is a genuine test, not a lap of honour.** The prediction was written with
+the miniQMC loss already known, and a theory that predicts its own exception is
+only worth something if the exception is checked. Same harness, same n=10,
+same Welch test, same equal-work gate, same ladder.
+
+**Second axis, separately: corsys4.** Frontier is a flagship machine with an
+exhaustive public user guide, and Experiment A measured the consequence -- web
+and declared scored IDENTICALLY. The artifact's unique surface there is small by
+construction. corsys4 has no public user guide and has Optane tiering whose
+behaviour is undocumented, so the surface is much larger. Expect the artifact to
+do better there, and note in advance that this is closer to CONFIRMATION than
+discovery: Experiment A already predicts it. XSBench x {Frontier, corsys4} gives
+a clean 2x2 of access pattern against documentation level.

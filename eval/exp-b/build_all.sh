@@ -19,6 +19,10 @@ D=$(cd "$(dirname "$0")" && pwd)
 
 for cfg in "$D/configs/$BENCH"/*.sh; do
   name=$(basename "$cfg" .sh)
+  # ONLY="a b c" restricts which configs are built, matching the timed job.
+  if [ -n "${ONLY:-}" ]; then
+    case " $ONLY " in *" $name "*) ;; *) continue ;; esac
+  fi
   tree="$D/arms/$name/$BENCH"
   echo "=== building $name ==="
   if [ ! -d "$tree" ]; then

@@ -62,6 +62,23 @@ CONFIGS=()
 for c in "$SNAP/configs"/*.sh; do CONFIGS+=("$c"); done
 [ ${#CONFIGS[@]} -gt 0 ] || { echo "no configs in $D/configs/$BENCH" >&2; exit 1; }
 
+# ONLY="a b c" restricts the run to named configs. Used for one-knob
+# decomposition runs, where re-timing floor (58 s) and the full arm set would
+# double the allocation for no extra information. The arms themselves are always
+# worth including as in-allocation references: a knob effect measured against a
+# reference from a DIFFERENT allocation would be confounded with drift.
+if [ -n "${ONLY:-}" ]; then
+  sel=()
+  for want in $ONLY; do
+    for c in "${CONFIGS[@]}"; do
+      [ "$(basename "$c" .sh)" = "$want" ] && sel+=("$c")
+    done
+  done
+  [ ${#sel[@]} -gt 0 ] || { echo "ONLY matched no configs: $ONLY" >&2; exit 1; }
+  CONFIGS=("${sel[@]}")
+fi
+
+
 echo "=== exp-b: $BENCH, ${#CONFIGS[@]} configs, $PASSES passes, job $SLURM_JOB_ID ==="
 printf '  %s\n' "${CONFIGS[@]}"
 
