@@ -56,16 +56,33 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
   # task.md told them the source is in their directory. Exec'ing them out of
   # configs/ pointed SRC_DIR at configs/miniqmc/src, which does not exist.
   cp "$cfg" "$tree/SOLUTION.sh"
-  ( cd "$tree" || exit 1
-    source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
-    bash ./SOLUTION.sh build ) > "$blog" 2>&1
+  do_build() {
+    ( cd "$tree" || exit 1
+      source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
+      bash ./SOLUTION.sh build ) > "$blog" 2>&1
+  }
+  do_build
   rc=$?
+  # ONE retry, only for the transient case. The Cray wrapper shells out to
+  # pkg-config on every compile, and on a busy login node that has been seen to
+  # die with "Bus error (core dumped) ... Error invoking pkg-config!" on
+  # arbitrary translation units while the identical command succeeds for other
+  # configs in the same loop. That is a flaky node, not a bad config, and it
+  # silently produced two unrunnable arms in job 5260676. Retry once and say so.
+  # No further retries: a config that genuinely cannot build must fail loudly.
+  if [ $rc -ne 0 ] && grep -qE 'Error invoking pkg-config|Bus error' "$blog" 2>/dev/null; then
+    echo "    transient pkg-config/bus error -- retrying once"
+    rm -rf "$tree/build"
+    do_build
+    rc=$?
+  fi
   # NOT `echo $?` after a pipeline: that reports tail's status, which is always
   # 0, so every failed build announced success.
   tail -5 "$blog"
   echo "    exit=$rc   full log: $blog"
 done
 
+missing=0
 echo
 echo "=== did the manipulation actually happen? ==="
 # A config that loaded craype-hugepages2M RELINKS, so its binary must differ
@@ -74,6 +91,8 @@ echo "=== did the manipulation actually happen? ==="
 # report as "the arms performed the same", the wrong conclusion from right numbers.
 for cfg in "$D/configs/$BENCH"/*.sh; do
   name=$(basename "$cfg" .sh)
+  bin=""   # must be set before the -x test; an unrecognised BENCH would
+           # otherwise leave it unbound and crash the summary under `set -u`
   case "$BENCH" in
     amg)     bin="$D/arms/$name/$BENCH/src/src/test/amg" ;;
     miniqmc) bin="$D/arms/$name/$BENCH/build/bin/miniqmc" ;;
@@ -86,6 +105,7 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
   fi
   if [ ! -x "$bin" ]; then
     printf '  %-14s NO BINARY -- build failed; this config cannot be timed\n' "$name"
+    missing=$((missing+1))
   else
     printf '  %-14s %s  %s\n' "$name" "$(sha256sum "$bin" | cut -c1-16)" \
       "$(stat -c %s "$bin") bytes"
@@ -93,6 +113,17 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
 done
 echo
 echo "If two configs share a hash they built identically -- check whether the one"
-echo "that asked for craype-hugepages2M actually loaded it. If any config shows"
-echo "NO BINARY, do not submit the timed job: a missing config is a missing"
-echo "result, not a slow one."
+echo "that asked for craype-hugepages2M actually loaded it."
+
+if [ "$missing" -gt 0 ]; then
+  echo
+  echo "############################################################"
+  echo "##  $missing CONFIG(S) HAVE NO BINARY. DO NOT SUBMIT."
+  echo "##  A missing config is a missing result, not a slow one --"
+  echo "##  the timed job runs happily without it and spends the"
+  echo "##  allocation producing a comparison with a hole in it."
+  echo "############################################################"
+  exit 1
+fi
+echo
+echo "all $(ls "$D/configs/$BENCH"/*.sh 2>/dev/null | wc -l) configs present; $missing missing."
