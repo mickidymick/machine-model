@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment B — the measured artifact made the code slower</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { display: block; max-width: 100%; }
+</style>
+<style>
+  :root {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+
+    --f-data: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    --f-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+    --gutter: 7.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #0e1417;
+      --surface-1:  #151d21;
+      --ink:        #dfe7eb;
+      --ink-2:      #9dadb6;
+      --ink-3:      #77878f;
+      --rule:       #2a373d;
+      --rule-soft:  #202b30;
+      --measured:   #58b3ac;
+      --measured-bg:#122b2b;
+      --declared:   #d9924f;
+      --declared-bg:#2c2115;
+      --critical:   #d97570;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:      #eef1f4;
+    --surface-1:  #f8fafb;
+    --ink:        #11181d;
+    --ink-2:      #46545e;
+    --ink-3:      #6d7d88;
+    --rule:       #cdd6dc;
+    --rule-soft:  #dde4e9;
+    --measured:   #10605f;
+    --measured-bg:#dfeceb;
+    --declared:   #a2521c;
+    --declared-bg:#f2e5d8;
+    --critical:   #98332f;
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0e1417;
+    --surface-1:  #151d21;
+    --ink:        #dfe7eb;
+    --ink-2:      #9dadb6;
+    --ink-3:      #77878f;
+    --rule:       #2a373d;
+    --rule-soft:  #202b30;
+    --measured:   #58b3ac;
+    --measured-bg:#122b2b;
+    --declared:   #d9924f;
+    --declared-bg:#2c2115;
+    --critical:   #d97570;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; flex-direction: column; gap: 1.25rem; }
+  .kicker {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.25rem;
+  }
+  h1 {
+    font-family: var(--f-data);
+    font-size: clamp(1.6rem, 4vw, 2.35rem);
+    line-height: 1.14;
+    letter-spacing: -.025em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    max-width: 26ch;
+  }
+  .standfirst { font-size: 1.06rem; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .standfirst b { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections with gutter rail ---- */
+  section { display: grid; gap: 1.15rem; }
+  @media (min-width: 60rem) {
+    section {
+      grid-template-columns: var(--gutter) minmax(0, 1fr);
+      column-gap: 2.5rem;
+    }
+    /* Row 1 only. Spanning N rows forces N row tracks, and the row-gaps
+       between the empty ones pile up as dead space at the section's end. */
+    section > .rail { grid-column: 1; grid-row: 1; }
+    section > :not(.rail) { grid-column: 2; }
+  }
+  .rail {
+    font-family: var(--f-data);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: .45rem;
+    border-top: 2px solid var(--ink);
+    align-self: start;
+  }
+  h2 {
+    font-family: var(--f-data);
+    font-size: 1.14rem;
+    font-weight: 600;
+    letter-spacing: -.015em;
+    margin: 0;
+    text-wrap: balance;
+    border-top: 2px solid var(--ink);
+    padding-top: .45rem;
+  }
+  @media (min-width: 60rem) { h2 { border-top: none; padding-top: .35rem; } }
+  section p { margin: 0; max-width: 68ch; }
+  .lead-in { font-size: 1.02rem; }
+
+  /* ---- lists ---- */
+  .items { list-style: none; display: flex; flex-direction: column; gap: 1.05rem; margin: 0; padding: 0; }
+  .items > li { display: flex; flex-direction: column; gap: .28rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
+  .items > li > .hd { font-weight: 600; }
+  .items > li > .bd { color: var(--ink-2); font-size: .95rem; max-width: 68ch; }
+  .items > li.key { border-left-color: var(--measured); }
+  .items > li.ask { border-left-color: var(--declared); }
+  .num { font-family: var(--f-data); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--measured); }
+  .when {
+    font-family: var(--f-data);
+    font-size: .72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--declared);
+  }
+
+  /* ---- figures ---- */
+  figure { margin: 0; display: flex; flex-direction: column; gap: .7rem; }
+  figure svg { max-width: 100%; height: auto; color: var(--ink); display: block; }
+  figcaption { font-size: .87rem; color: var(--ink-2); max-width: 68ch; }
+  .dg-box   { fill: var(--surface-1); stroke: currentColor; stroke-width: 1; }
+  .dg-acc   { fill: var(--measured-bg); stroke: var(--measured); stroke-width: 1.4; }
+  .dg-ghost { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-slot  { fill: none; stroke: var(--rule); stroke-width: 1; }
+  .dg-t     { fill: currentColor; font-family: var(--f-data); font-size: 12.5px; }
+  .dg-s     { fill: var(--ink-2); font-family: var(--f-body); font-size: 11px; }
+  .dg-l     { fill: var(--ink-3); font-family: var(--f-data); font-size: 10.5px; letter-spacing: .06em; }
+  .dg-a     { fill: var(--measured); font-family: var(--f-data); font-size: 12.5px; }
+  .dg-line  { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .dg-linea { stroke: var(--measured); stroke-width: 1.6; fill: none; }
+  .dg-dash  { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+  .dg-head  { fill: var(--ink); }
+  .dg-heada { fill: var(--measured); }
+
+  /* ---- side by side ---- */
+  .compare { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  @media (min-width: 48rem) { .compare { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 48rem) { .compare.single { grid-template-columns: 1fr; } }
+  .pane { background: var(--surface-1); padding: 1rem 1.1rem 1.15rem; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+  .pane .cap {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pane.right .cap { color: var(--measured); }
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    font-family: var(--f-data);
+    font-size: .78rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  pre b { color: var(--ink); font-weight: 600; }
+  pre .m { color: var(--measured); }
+  pre .d { color: var(--declared); }
+  .pane .verdict { font-size: .89rem; color: var(--ink); }
+
+  code {
+    font-family: var(--f-data);
+    font-size: .88em;
+    background: var(--surface-1);
+    padding: .05em .3em;
+    border: 1px solid var(--rule-soft);
+  }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem .8rem .5rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--rule);
+  }
+  /* ---- knob table: verdict + status markers ---- */
+  .kn { font-weight: 600; }
+  .kn code { background: none; border: none; padding: 0; }
+  td.v { font-size: .87rem; }
+  .v-yes::before  { content: "\2713\00a0"; color: var(--measured); font-weight: 700; }
+  .v-part::before { content: "\007e\00a0"; color: var(--declared); font-weight: 700; }
+  .v-no::before   { content: "\2717\00a0"; color: var(--critical); font-weight: 700; }
+  .v-none::before { content: "\2014\00a0"; color: var(--ink-3); font-weight: 700; }
+  .st {
+    font-family: var(--f-data);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .st-in   { color: var(--measured); }
+  .st-part { color: var(--declared); }
+  .st-open { color: var(--ink-3); }
+  .legend {
+    font-family: var(--f-data);
+    font-size: .68rem;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem 1.4rem;
+  }
+
+  .note {
+    background: var(--surface-1);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--measured);
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    font-size: .93rem;
+  }
+  .note.warn { border-left-color: var(--declared); }
+  .note p { max-width: 68ch; }
+  a { color: var(--measured); }
+  a:focus-visible { outline: 2px solid var(--measured); outline-offset: 2px; }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 0; }
+  footer { font-size: .82rem; color: var(--ink-3); font-family: var(--f-data); }
+</style>
+<style>
+  /* page-local: the shared stylesheet has no .muted, and results.html borrows
+     that stylesheet rather than owning it. */
+  .muted { color: var(--ink-3); font-size: .92rem; }
+  .masthead h1 { max-width: 34ch; }
+  td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right; }
+  /* Arms use the page's existing declared/measured language rather than importing
+     a second palette. Validated: CVD dE 9.8 light / 12.2 dark, normal-vision
+     15.8 / 17.6, all three >= 3:1 contrast. The two low-chroma colours "read
+     gray", so every bar is direct-labelled and a legend is always present --
+     colour never carries identity alone. */
+  :root { --arm-web: #6d7d88; --arm-declared: #a2521c; --arm-measured: #10605f; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --arm-web:#77878f; --arm-declared:#d9924f; --arm-measured:#58b3ac; }
+  }
+  :root[data-theme="dark"] { --arm-web:#77878f; --arm-declared:#d9924f; --arm-measured:#58b3ac; }
+  .g-grid { stroke: var(--rule-soft); stroke-width: 1; }
+  .g-axis { stroke: var(--rule); stroke-width: 1; }
+  .g-ax  { fill: var(--ink-3); font-family: var(--f-body); font-size: 11.5px; }
+  .g-val { fill: var(--ink); font-family: var(--f-data); font-size: 11.5px;
+           font-weight: 600; font-variant-numeric: tabular-nums; }
+  .win { color: var(--measured); font-weight: 600; }
+  .lose { color: var(--critical); font-weight: 600; }
+</style>
+<style>
+  blockquote {
+    margin: 1rem 0 1rem 0; padding: .6rem 0 .6rem 1.1rem;
+    border-left: 3px solid var(--rule);
+    color: var(--ink-2); font-size: .95rem; max-width: 68ch;
+  }
+  section { margin: 2.75rem 0; }
+  section h2 { margin-bottom: .6rem; }
+  section h3 { margin: 1.6rem 0 .5rem; font-size: 1rem; }
+  ol { max-width: 68ch; } ol li { margin: .4rem 0; }
+  p { max-width: 68ch; }
+  code { font-family: var(--f-data); font-size: .9em; }
+  footer { border-top: 1px solid var(--rule-soft); padding-top: 1rem; margin-top: 3rem; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="masthead">
+    <p class="key">Experiment B · miniQMC · Frontier · 2026-08-13</p>
+    <h1>The measured artifact made the code slower.</h1>
+    <p class="lead-in">Two agents were given the same benchmark source, the same
+    fixed problem and the same one-node budget. They differed in one file: a
+    briefing of measured facts about the machine. The agent <em>without</em> it
+    produced the faster configuration, by 2.9%, at p&nbsp;=&nbsp;6.3&times;10<sup>&minus;8</sup>.</p>
+  </header>
+
+  <section>
+    <h2>The ladder</h2>
+    <svg viewBox="0 0 680 240" width="100%" role="img" aria-label="Full ladder, floor to ceiling">
+<text x="178" y="41" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">floor</text>
+<rect x="190" y="27" width="405.0" height="21" rx="4" fill="var(--ink-3)"/>
+<line x1="593.9" x2="596.2" y1="37.5" y2="37.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="593.9" x2="593.9" y1="31" y2="44" stroke="var(--paper)" stroke-width="2"/>
+<line x1="596.2" x2="596.2" y1="31" y2="44" stroke="var(--paper)" stroke-width="2"/>
+<text x="607.0" y="42" style="font:600 13px var(--f-data);fill:var(--ink)">58.70s</text>
+<text x="178" y="85" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">with-artifact</text>
+<rect x="190" y="71" width="197.0" height="21" rx="4" fill="var(--measured)"/>
+<line x1="385.7" x2="388.3" y1="81.5" y2="81.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="385.7" x2="385.7" y1="75" y2="88" stroke="var(--paper)" stroke-width="2"/>
+<line x1="388.3" x2="388.3" y1="75" y2="88" stroke="var(--paper)" stroke-width="2"/>
+<text x="399.0" y="86" style="font:600 13px var(--f-data);fill:var(--ink)">28.55s</text>
+<text x="178" y="129" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">ceiling</text>
+<rect x="190" y="115" width="194.2" height="21" rx="4" fill="var(--ink-3)"/>
+<line x1="380.9" x2="387.4" y1="125.5" y2="125.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="380.9" x2="380.9" y1="119" y2="132" stroke="var(--paper)" stroke-width="2"/>
+<line x1="387.4" x2="387.4" y1="119" y2="132" stroke="var(--paper)" stroke-width="2"/>
+<text x="396.2" y="130" style="font:600 13px var(--f-data);fill:var(--ink)">28.14s</text>
+<text x="178" y="173" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">no-artifact</text>
+<rect x="190" y="159" width="191.5" height="21" rx="4" fill="var(--declared)"/>
+<line x1="381.0" x2="382.0" y1="169.5" y2="169.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="381.0" x2="381.0" y1="163" y2="176" stroke="var(--paper)" stroke-width="2"/>
+<line x1="382.0" x2="382.0" y1="163" y2="176" stroke="var(--paper)" stroke-width="2"/>
+<text x="393.5" y="174" style="font:600 13px var(--f-data);fill:var(--ink)">27.75s</text>
+<line x1="190" x2="604" y1="200" y2="200" stroke="var(--rule)"/>
+<text x="190" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">0</text>
+<text x="273" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">12</text>
+<text x="356" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">24</text>
+<text x="438" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">36</text>
+<text x="521" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">48</text>
+<text x="604" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">60</text>
+<text x="190" y="232" style="font:11px var(--f-body);fill:var(--ink-3)">seconds — miniQMC self-reported Total, mean of 10 passes, bars show ±1 sd</text>
+</svg>
+    <p class="cap">Floor is ZeroSum&rsquo;s naive default reproduced &mdash; one node, 8 ranks,
+    7 OpenMP threads, no <code>-c</code>. Ceiling is hand-tuned from every claim this
+    project has measured. 5 configurations &times; 10 interleaved passes, 50 runs,
+    0 failures.</p>
+
+    <h3>The four fast configurations, in detail</h3>
+    <svg viewBox="0 0 680 240" width="100%" role="img" aria-label="Detail of the four fast configurations">
+<text x="178" y="41" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">with-artifact</text>
+<rect x="190" y="27" width="320.9" height="21" rx="4" fill="var(--measured)"/>
+<line x1="471.1" x2="550.6" y1="37.5" y2="37.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="471.1" x2="471.1" y1="31" y2="44" stroke="var(--paper)" stroke-width="2"/>
+<line x1="550.6" x2="550.6" y1="31" y2="44" stroke="var(--paper)" stroke-width="2"/>
+<text x="522.9" y="42" style="font:600 13px var(--f-data);fill:var(--ink)">28.55s</text>
+<text x="178" y="85" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">ceiling</text>
+<rect x="190" y="71" width="236.0" height="21" rx="4" fill="var(--ink-3)"/>
+<line x1="328.5" x2="523.5" y1="81.5" y2="81.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="328.5" x2="328.5" y1="75" y2="88" stroke="var(--paper)" stroke-width="2"/>
+<line x1="523.5" x2="523.5" y1="75" y2="88" stroke="var(--paper)" stroke-width="2"/>
+<text x="438.0" y="86" style="font:600 13px var(--f-data);fill:var(--ink)">28.14s</text>
+<text x="178" y="129" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">no-artifact</text>
+<rect x="190" y="115" width="155.2" height="21" rx="4" fill="var(--declared)"/>
+<line x1="331.0" x2="359.5" y1="125.5" y2="125.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="331.0" x2="331.0" y1="119" y2="132" stroke="var(--paper)" stroke-width="2"/>
+<line x1="359.5" x2="359.5" y1="119" y2="132" stroke="var(--paper)" stroke-width="2"/>
+<text x="357.2" y="130" style="font:600 13px var(--f-data);fill:var(--ink)">27.75s</text>
+<text x="178" y="173" text-anchor="end" style="font:13px var(--f-body);fill:var(--ink-2)">no-artifact + hugepages</text>
+<rect x="190" y="159" width="142.8" height="21" rx="4" fill="var(--declared)"/>
+<line x1="321.7" x2="344.0" y1="169.5" y2="169.5" stroke="var(--paper)" stroke-width="2"/>
+<line x1="321.7" x2="321.7" y1="163" y2="176" stroke="var(--paper)" stroke-width="2"/>
+<line x1="344.0" x2="344.0" y1="163" y2="176" stroke="var(--paper)" stroke-width="2"/>
+<text x="344.8" y="174" style="font:600 13px var(--f-data);fill:var(--ink)">27.69s</text>
+<line x1="190" x2="604" y1="200" y2="200" stroke="var(--rule)"/>
+<text x="190" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">27</text>
+<text x="273" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">27</text>
+<text x="356" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">28</text>
+<text x="438" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">28</text>
+<text x="521" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">29</text>
+<text x="604" y="218" text-anchor="middle" style="font:11px var(--f-data);fill:var(--ink-3)">29</text>
+<text x="190" y="232" style="font:11px var(--f-body);fill:var(--ink-3)">seconds — miniQMC self-reported Total, mean of 10 passes, bars show ±1 sd</text>
+</svg>
+    <p class="cap"><strong>Axis does not start at zero</strong> &mdash; this is a zoom on the
+    27&ndash;29&nbsp;s band of the chart above, where the arm difference lives.</p>
+  </section>
+
+  <section class="note warn">
+    <h3>The pre-registered mechanism was worth nothing</h3>
+    <p>The whole experiment was built around huge pages. Our briefing records a
+    <strong>2.4&times;</strong> page-size penalty at a ~32&nbsp;MB working set, and
+    <code>craype-hugepages2M</code> works by relinking, so it must be a build-time
+    decision. That was the predicted source of the entire effect.</p>
+    <p>Isolated by a configuration identical to the control except for one added
+    <code>module load</code> line: <strong class="lose">+0.06&nbsp;s (0.2%), p&nbsp;=&nbsp;0.062.
+    Not significant.</strong></p>
+  </section>
+
+  <section>
+    <h2>Why: the number was right, the regime was wrong</h2>
+    <p>The control <em>considered and rejected</em> the module, and said why:</p>
+    <blockquote>the hot kernel streams 64 contiguous ~12&nbsp;KB coefficient chunks per
+    spline evaluation, so page walks overlap with the DRAM traffic they precede
+    &mdash; this code is bandwidth-bound, not TLB-latency-bound, so the payoff is
+    small.</blockquote>
+    <p><strong>It was right.</strong> Our 2.4&times; is a correct measurement &mdash; taken with a
+    <em>pointer-chase</em>, dependent random access. miniQMC <em>streams</em>. The
+    measurement was sound; the regime did not transfer.</p>
+
+    <h3>And the briefing said so itself</h3>
+    <p>Line 17 of the document the treatment arm was reading:</p>
+    <blockquote><strong>Conditions are part of every number.</strong> A latency measured on
+    4K pages, or a bandwidth measured across one of four network links, does not
+    generalise to other conditions. The conditions are stated; carry them.</blockquote>
+    <p>The caveat was present, in context, and the misapplication happened anyway.
+    <strong>Stating conditions in prose is not sufficient to stop a number being used
+    outside the regime it was measured in.</strong> That is a design finding about
+    measured-machine artifacts, not merely a null result.</p>
+  </section>
+
+  <section>
+    <h2>Our own hand-tuned reference was beaten</h2>
+    <p>The ceiling encoded our measured NUMA claims as 4 ranks &times; 14 threads, one per
+    domain. <strong>Both</strong> agents independently chose 8 &times; 7 on L3 boundaries, and both
+    beat it. The treatment arm explicitly considered 4&nbsp;&times;&nbsp;14 &mdash; its own choice in
+    an earlier round &mdash; and rejected it: one core per L3 group is OS-reserved,
+    leaving exactly 7 usable per CCD across 8 CCDs, so 8&nbsp;&times;&nbsp;7 is the only geometry
+    confining a rank to a single L3 <em>and</em> a single NUMA domain.</p>
+    <p class="muted">The ceiling is also the noisiest configuration in the set
+    (sd 1.67% against 0.19&ndash;0.67% elsewhere).</p>
+  </section>
+
+  <section>
+    <h2>The harness is measuring what it should</h2>
+    <p>Floor&nbsp;&rarr;&nbsp;ceiling spans <strong>2.09&times;</strong>, against ZeroSum&rsquo;s published
+    <strong>2.33&times;</strong> (63.67&nbsp;&rarr;&nbsp;27.33&nbsp;s) on the same benchmark and the same
+    machine, with our floor reproducing their baseline shape exactly. Equal work
+    was verified on all 50 runs &mdash; 56 walkers, recovered independently from
+    <code>ranks &times; walkers</code> and from <code>FOM &times; time / n<sub>elec</sub><sup>3</sup></code>.</p>
+    <p>Method follows their section&nbsp;4.1: n&nbsp;=&nbsp;10 per condition in one allocation,
+    interleaved in rotating order, decided by a Welch t-test rather than a ratio
+    of single runs.</p>
+  </section>
+
+  <section class="note">
+    <h3>What is not established</h3>
+    <p>The residual after removing huge pages is &minus;0.86&nbsp;s and significant, so
+    something else makes the treatment arm slower. <code>OMP_PLACES=cores</code> vs
+    <code>threads</code>, and BLAS linkage &mdash; <code>-DBLA_VENDOR=All</code> against an explicitly
+    pinned <code>libsci_gnu_*</code> path &mdash; both differ. <strong>That residual is not
+    attributed and should not be claimed</strong> without a one-knob run.</p>
+    <p>One benchmark, one machine, one configuration per arm. This is not
+    &ldquo;measured artifacts make code slower.&rdquo;</p>
+  </section>
+
+  <section>
+    <h2>What this supports</h2>
+    <ol>
+      <li>On this workload the artifact&rsquo;s contribution was <strong class="lose">negative and
+      significant</strong>, and its pre-registered mechanism was worth nothing.</li>
+      <li>The failure is <strong>regime mismatch, not bad data</strong>. Every number in the
+      briefing is correct.</li>
+      <li>The briefing&rsquo;s own conditions field <strong>did not prevent</strong> the misuse.</li>
+      <li>A control with no machine document reasoned to the better configuration
+      <strong>from the source code</strong>, and beat our hand-tuned reference.</li>
+    </ol>
+    <p>The design step this points to: a measured artifact should carry the
+    <strong>access pattern under which each number was obtained</strong> as a first-class,
+    matchable field &mdash; something a reader must reconcile against its own workload
+    &mdash; rather than as prose it is asked to honour.</p>
+  </section>
+
+  <footer class="muted">
+    <p>Job 5257305 &middot; frontier03766 &middot; 50 timed runs, 0 failures &middot;
+    raw data <code>results/miniqmc_20260813_161703.rebuilt.csv</code> &middot;
+    pre-registration and full write-up in <code>eval/exp-b/</code></p>
+  </footer>
+</div>
+
+</body>
+</html>
