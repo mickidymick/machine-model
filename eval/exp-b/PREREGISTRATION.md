@@ -271,3 +271,25 @@ artifact being used correctly by NOT being used, and it is worth reporting.
 **This changes nothing about the predictions.** The comparison remains
 no-artifact vs with-artifact on intra-node placement, which is where the
 artifact-only content was always concentrated.
+
+## SCORED, 2026-08-13. The prediction was falsified.
+
+Full write-up in `RESULTS.md`. In brief, so the pre-registration is honest about
+its own outcome:
+
+- **"with-artifact finishes faster than no-artifact": FALSE.** 28.55 s vs
+  27.75 s, p = 6.3e-08, n = 10, sd < 0.7%. The artifact arm lost significantly.
+- **"the mechanism has to be placement": no.** The arms CONVERGED on placement
+  (both 8x7x7). There was no placement disagreement left to win or lose.
+- **The huge-page decision, isolated: 0.2%, p = 0.062, not significant.** The
+  mechanism this whole experiment was built around is worth nothing measurable
+  on this workload.
+- **The no-artifact arm's rejection reasoning was correct.** miniQMC streams;
+  our 2.4x page-size penalty was measured with a pointer-chase. Right number,
+  wrong regime.
+- **Our hand-tuned ceiling was beaten by both arms** (27.75 vs 28.14 s).
+
+The falsifier fired and is recorded as fired. The pre-registration's own clause
+applies: "If AMG comes back a null, the honest reading is that this prediction
+was wrong on this benchmark -- not that the experiment failed." That holds here
+in a stronger form, because the result is not a null but a loss.
