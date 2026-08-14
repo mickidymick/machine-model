@@ -110,3 +110,55 @@ The methodological answer this points to: a measured artifact should carry the
 **access pattern under which each number was obtained** as a first-class,
 matchable field, not as prose the reader is asked to honour. That is a concrete,
 testable next design step, and this experiment is what motivates it.
+
+---
+
+# ATTRIBUTION COMPLETE — 2026-08-14
+
+Three decomposition runs, n = 10 each, all interleaved in single allocations.
+
+| knob varied (one at a time, from with-artifact) | mean s | vs with-artifact | verdict |
+|---|---|---|---|
+| `OMP_PLACES` cores→threads | 28.35 | +0.04 | null |
+| BLAS pinned libsci→`BLA_VENDOR=All` | 28.36 | +0.05 | **no-op** — byte-identical binary |
+| drop `--distribution=block:block` | 28.41 | +0.10 | null |
+| `craype-x86-trento` | — | — | killed by `objdump`, identical codegen |
+| **drop `craype-hugepages2M`** | **27.69** | **−0.76** | **p = 3.2e−10** |
+
+**Huge pages account for 96% of the arm gap.** Residual 0.03 s, p = 0.35, null.
+Strip them from the treatment arm and it is statistically indistinguishable from
+the control (27.69 vs 27.66 s).
+
+## The distinction that matters
+
+| | relink | runtime `HUGETLB_*` | effect |
+|---|---|---|---|
+| no-artifact-hugepages | yes | **no** | +0.06 s, n.s. |
+| with-artifact | yes | **yes** | **−0.76 s, p=3e−10** |
+
+The relink alone is free. **Huge pages actually backing the heap is what costs
+2.7%.** The first decomposition missed this because the added `module load`
+landed in `build()` only, and `no-artifact`'s `run()` loads no modules.
+
+## The corrected claim
+
+Not "the number failed to transfer." **The number inverted.** A measured 2.4×
+*benefit* under pointer-chase became a measured 2.7% *penalty* under streaming
+with first-touch placement. An artifact recording `page_size_penalty: 2.4x`
+without the access pattern does not merely fail to help — it reverses sign, and
+the briefing's prose instruction to "carry the conditions" did not prevent it.
+
+**Hypothesis for the mechanism, not measured:** first-touch granularity. At 4 KB
+each thread's slice of the ~19 MB determinant matrices lands on its own NUMA
+domain; at 2 MB one page can span data first-touched by threads on different
+domains, coarsening placement and forcing remote reads. Testing it is future work.
+
+## Method notes
+
+- `craype-x86-trento` was eliminated by `objdump` — 2779 FMA and 19521 AVX2
+  instructions in both binaries — for the cost of one command rather than an
+  allocation.
+- The BLAS knob was a **no-op**: byte-identical binary, so its null says nothing
+  about BLAS. Recorded because it was briefly counted as evidence.
+- Only **two distinct binaries** exist across all nine configurations, split
+  exactly on the huge-page relink (1226920 vs 1226960 bytes).

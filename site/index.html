@@ -861,11 +861,13 @@ node   0   1   2   3
       <p>
         <b>Experiment B has been run, and it went against us.</b> Two agents, same benchmark
         source, same fixed problem, one node; one of them also had the measured briefing. The
-        agent <i>without</i> it produced the faster configuration &mdash; 2.9%, p&nbsp;=&nbsp;6.3e&minus;8
-        &mdash; and the huge-page relink the whole experiment was built around measured 0.2%,
-        not significant. Our 2.4&times; page-size penalty is a correct number taken with a
-        pointer-chase; miniQMC streams. The briefing&rsquo;s own &ldquo;carry the conditions&rdquo;
-        instruction did not stop it being applied outside its regime.
+        agent <i>without</i> it produced the faster configuration &mdash; 2.9%, p&nbsp;=&nbsp;1.7e&minus;12
+        &mdash; and <b>96% of that gap is one measured fact applied outside its regime</b>.
+        Our 2.4&times; page-size penalty is a correct number taken with a pointer-chase;
+        miniQMC streams, and there the same fact <b>inverted</b>, costing 2.7%. Strip
+        huge pages from the treatment arm and it becomes indistinguishable from the
+        control. The briefing&rsquo;s own &ldquo;carry the conditions&rdquo; instruction did
+        not stop it.
         &rarr; <a href="exp-b.html"><b>Both experiments, read together</b></a>
       </p>
     </div>

@@ -339,7 +339,7 @@
 <div class="page">
   <header class="masthead">
     <p class="key">Two experiments · Frontier · 2026-08-10 and 2026-08-13</p>
-    <h1>It changed the answers. It did not change the outcome.</h1>
+    <h1>It changed the answers. Then it made the code slower.</h1>
     <p class="lead-in">Experiment&nbsp;A asked whether a measured machine artifact changes
     what a model <em>says</em>. It does, decisively &mdash; but only against
     <em>measurement</em>, because a session with nothing but web search matched a curated
@@ -475,14 +475,29 @@
   </section>
 
   <section class="note warn">
-    <h3>The pre-registered mechanism was worth nothing</h3>
+    <h3>The pre-registered mechanism did not fail to help. It hurt.</h3>
     <p>The whole experiment was built around huge pages. Our briefing records a
     <strong>2.4&times;</strong> page-size penalty at a ~32&nbsp;MB working set, and
     <code>craype-hugepages2M</code> works by relinking, so it must be a build-time
-    decision. That was the predicted source of the entire effect.</p>
-    <p>Isolated by a configuration identical to the control except for one added
-    <code>module load</code> line: <strong class="lose">+0.06&nbsp;s (0.2%), p&nbsp;=&nbsp;0.062.
-    Not significant.</strong></p>
+    decision. That was the predicted source of the entire effect &mdash; in the
+    treatment arm&rsquo;s favour.</p>
+    <p>Isolated by taking the treatment configuration and removing that one module,
+    leaving everything else identical: <strong class="lose">huge pages cost
+    0.76&nbsp;s (2.67%), p&nbsp;=&nbsp;3&times;10<sup>&minus;10</sup></strong> &mdash; <b>96% of the
+    entire arm gap</b>. Strip them and the treatment arm becomes statistically
+    indistinguishable from the control (27.69 vs 27.66&nbsp;s, p&nbsp;=&nbsp;0.35).</p>
+    <table class="scores">
+      <thead><tr><th>configuration</th><th>mean&nbsp;s</th><th>sd</th><th>vs control</th></tr></thead>
+      <tbody>
+        <tr><td>no-artifact <span class="muted">(control)</span></td><td>27.66</td><td>0.090</td><td>&mdash;</td></tr>
+        <tr><td>with-artifact <b>minus huge pages</b></td><td>27.69</td><td>0.038</td><td>+0.03 <span class="muted">(null, p=0.35)</span></td></tr>
+        <tr class="tot"><td>with-artifact</td><td>28.45</td><td>0.110</td><td class="lose">+0.79 <span class="muted">(p=1.7e&minus;12)</span></td></tr>
+      </tbody>
+    </table>
+    <p class="cap">n&nbsp;=&nbsp;10 per configuration, interleaved in one allocation. The
+    control and the huge-page-free treatment build are <b>byte-identical binaries</b>,
+    so the only thing separating them is the runtime environment &mdash; and it measures
+    as nothing.</p>
   </section>
 
   <section>
@@ -492,9 +507,18 @@
     spline evaluation, so page walks overlap with the DRAM traffic they precede
     &mdash; this code is bandwidth-bound, not TLB-latency-bound, so the payoff is
     small.</blockquote>
-    <p><strong>It was right.</strong> Our 2.4&times; is a correct measurement &mdash; taken with a
-    <em>pointer-chase</em>, dependent random access. miniQMC <em>streams</em>. The
-    measurement was sound; the regime did not transfer.</p>
+    <p><strong>It was right, and it understated its own case.</strong> Our 2.4&times; is a
+    correct measurement &mdash; taken with a <em>pointer-chase</em>, dependent random
+    access. miniQMC <em>streams</em>. Outside its regime the number did not merely fail
+    to apply: <strong>it inverted.</strong> A measured 2.4&times; <em>benefit</em> became a
+    measured 2.7% <em>penalty</em>.</p>
+    <p class="muted">A plausible mechanism, offered as hypothesis rather than result:
+    first-touch granularity. With 4&nbsp;KB pages each thread&rsquo;s slice of the ~19&nbsp;MB
+    determinant matrices lands on its own NUMA domain exactly. With 2&nbsp;MB pages a
+    single page can span data first-touched by threads on different domains, so
+    placement coarsens and some reads go remote. That would bite precisely this code
+    &mdash; 8 ranks &times; 7 threads, all relying on first touch, on a four-domain node.
+    Testing it is future work.</p>
 
     <h3>And the briefing said so itself</h3>
     <p>Line 17 of the document the treatment arm was reading:</p>
@@ -532,14 +556,22 @@
   </section>
 
   <section class="note">
-    <h3>What is not established</h3>
-    <p>The residual after removing huge pages is &minus;0.86&nbsp;s and significant, so
-    something else makes the treatment arm slower. <code>OMP_PLACES=cores</code> vs
-    <code>threads</code>, and BLAS linkage &mdash; <code>-DBLA_VENDOR=All</code> against an explicitly
-    pinned <code>libsci_gnu_*</code> path &mdash; both differ. <strong>That residual is not
-    attributed and should not be claimed</strong> without a one-knob run.</p>
-    <p>One benchmark, one machine, one configuration per arm. This is not
-    &ldquo;measured artifacts make code slower.&rdquo;</p>
+    <h3>How the attribution was established</h3>
+    <p>Five one-knob configurations, each the treatment arm with exactly one change.
+    <code>OMP_PLACES</code>, <code>--distribution</code>, BLAS linkage and
+    <code>craype-x86-trento</code> all measured <b>null</b>; removing huge pages recovered
+    96% of the gap. The compiler-target hypothesis was killed for the cost of one
+    <code>objdump</code>: both binaries contain identical instruction counts
+    (2779 FMA, 19521 AVX2), so codegen was never the difference.</p>
+    <p>One correction worth recording: the BLAS knob produced a <b>byte-identical
+    binary</b>, so that comparison never varied anything and its null is not
+    evidence about BLAS.</p>
+    <h3>What is still not established</h3>
+    <p>The first-touch mechanism above is a hypothesis, not a measurement. And this
+    is one benchmark, one machine, one configuration per arm &mdash; <strong>not
+    &ldquo;measured artifacts make code slower.&rdquo;</strong> A pre-registered follow-up on
+    XSBench, whose random binary search is the access pattern our 2.4&times; was
+    actually taken under, tests whether the same fact helps when the regime matches.</p>
   </section>
 
   <section>
@@ -566,9 +598,11 @@
       decisively; against a well-documented machine, web search matches a curated
       declared summary <strong>exactly</strong>.</li>
       <li>On this workload the artifact&rsquo;s contribution to runtime was <strong class="lose">negative and
-      significant</strong>, and its pre-registered mechanism was worth nothing.</li>
+      significant</strong>, and <b>96% of it is attributable to a single measured fact
+      applied outside its regime</b>.</li>
       <li>The failure is <strong>regime mismatch, not bad data</strong>. Every number in the
-      briefing is correct.</li>
+      briefing is correct &mdash; and outside its regime the number <b>inverted its sign</b>,
+      which is worse than being useless.</li>
       <li>The briefing&rsquo;s own conditions field <strong>did not prevent</strong> the misuse.</li>
       <li>A control with no machine document reasoned to the better configuration
       <strong>from the source code</strong>, and beat our hand-tuned reference.</li>
