@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Experiment B — the measured artifact made the code slower</title>
+<title>Two experiments — what the measured artifact changes, and what it does not</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -318,19 +318,81 @@
   p { max-width: 68ch; }
   code { font-family: var(--f-data); font-size: .9em; }
   footer { border-top: 1px solid var(--rule-soft); padding-top: 1rem; margin-top: 3rem; }
+  table.scores { border-collapse: collapse; margin: 1.1rem 0 .6rem; font-size: .93rem; }
+  table.scores th, table.scores td {
+    padding: .5rem .95rem; border-bottom: 1px solid var(--rule-soft); text-align: right;
+  }
+  table.scores th:first-child, table.scores td:first-child { text-align: left; }
+  table.scores thead th {
+    font: 600 .68rem/1.4 var(--f-data); letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); border-bottom: 1px solid var(--rule);
+  }
+  table.scores td { font-family: var(--f-data); }
+  table.scores td:first-child { font-family: var(--f-body); color: var(--ink-2); }
+  table.scores tr.tot td { border-bottom: none; padding-top: .8rem; }
+  table.scores .win  { color: var(--measured); font-weight: 600; }
+  table.scores .lose { color: var(--critical); font-weight: 600; }
 </style>
 </head>
 <body>
 
 <div class="page">
   <header class="masthead">
-    <p class="key">Experiment B · miniQMC · Frontier · 2026-08-13</p>
-    <h1>The measured artifact made the code slower.</h1>
-    <p class="lead-in">Two agents were given the same benchmark source, the same
-    fixed problem and the same one-node budget. They differed in one file: a
-    briefing of measured facts about the machine. The agent <em>without</em> it
-    produced the faster configuration, by 2.9%, at p&nbsp;=&nbsp;6.3&times;10<sup>&minus;8</sup>.</p>
+    <p class="key">Two experiments · Frontier · 2026-08-10 and 2026-08-13</p>
+    <h1>It changed the answers. It did not change the outcome.</h1>
+    <p class="lead-in">Experiment&nbsp;A asked whether a measured machine artifact changes
+    what a model <em>says</em>. It does, decisively &mdash; but only against
+    <em>measurement</em>, because a session with nothing but web search matched a curated
+    topology document exactly. Experiment&nbsp;B asked whether that converts into a faster
+    run. <strong>It did not.</strong> The agent <em>without</em> the artifact produced the
+    faster configuration, by 2.9%, at p&nbsp;=&nbsp;6.3&times;10<sup>&minus;8</sup>.</p>
   </header>
+
+  <section>
+    <h2>Experiment A &mdash; the artifact changes the answers</h2>
+    <p>Fourteen questions with checkable answers, three fresh sessions, one arm each.
+    <b>web</b> was told only the machine&rsquo;s name and had search. <b>declared</b> got a
+    curated document built from what the machine says about itself &mdash; hwloc, the
+    node diagram, the ACPI tables. <b>measured</b> got our briefing.</p>
+
+    <table class="scores">
+      <thead>
+        <tr><th>category</th><th>web</th><th>declared</th><th>measured</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Docs sufficient <span class="muted">(the validity check)</span></td>
+            <td>5/5</td><td>5/5</td><td>5/5</td></tr>
+        <tr><td>Docs misleading</td><td>1/3</td><td>1/3</td><td class="win">3/3</td></tr>
+        <tr><td>Measurement only</td><td>1/4</td><td>1/4</td><td class="win">4/4</td></tr>
+        <tr><td>Neither knows</td><td>1/2</td><td>1/2</td><td class="win">2/2</td></tr>
+        <tr class="tot"><td>confidently wrong</td>
+            <td>0</td><td class="lose">1</td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">Claude Opus 4.8, effort high, 2026-08-10. &ldquo;Docs sufficient&rdquo; is the
+    control: if the measured arm won there too, the comparison would be rigged.
+    It is level three ways. &rarr; <a href="results.html">full Experiment A results</a></p>
+
+    <h3>Web search matches the curated document, exactly</h3>
+    <p><strong>web and declared score identically in every category.</strong> Everything we
+    hand-assembled from the machine &mdash; the non-obvious NUMA&nbsp;&harr;&nbsp;GCD map, the
+    56-core low-noise reservation, even Slurm&rsquo;s <code>-S 8</code> &mdash; a session told only
+    &ldquo;you are on Frontier&rdquo; found in the OLCF User Guide. <strong>Frontier is
+    documented well enough that free search reproduces a curated topology
+    summary.</strong> So the curated document buys essentially nothing, and the only gap
+    this project may claim is declared&nbsp;&rarr;&nbsp;measured.</p>
+    <p>The result stated properly: <strong>hedging protects a model from <em>missing</em>
+    information but not from <em>wrong</em> information.</strong> Where nothing is published,
+    every arm declined cleanly. Where the ACPI SLIT is published and wrong, they
+    repeat it as fact &mdash; and the one confidently wrong answer in the whole
+    evaluation came from the tidy curated document, not from search.</p>
+  </section>
+
+  <section>
+    <h2>Experiment B &mdash; but it did not make the code faster</h2>
+    <p>Two agents, the same benchmark source, the same fixed problem, the same
+    one-node budget. They differed in one file.</p>
+  </section>
 
   <section>
     <h2>The ladder</h2>
@@ -481,9 +543,29 @@
   </section>
 
   <section>
+    <h2>Reading the two together</h2>
+    <p>Experiment&nbsp;A is not undone by Experiment&nbsp;B. They answer different questions and
+    the answers are consistent: <strong>the artifact reliably changes what a model says,
+    and that did not convert into a faster run on this benchmark.</strong> The mechanism
+    connecting them is the same in both directions &mdash; a fact is only as good as the
+    regime it was measured in, and neither a published source nor our own measurement
+    carries that regime with it by default.</p>
+    <p>Where a published number is <em>wrong</em>, A shows the artifact fixes it: 3/3 against
+    1/3 on the misleading-docs questions. Where a number is <em>right but taken under a
+    different access pattern</em>, B shows the artifact actively misleads. Those are the
+    same defect seen from two sides &mdash; <strong>context that travels separately from the
+    number it qualifies.</strong></p>
+    <p class="muted">And the honest deflation, which belongs in both: on a machine as
+    well documented as Frontier, plain web search already reproduces a curated
+    topology summary. The artifact&rsquo;s value was never in restating what OLCF
+    publishes.</p>
+
     <h2>What this supports</h2>
     <ol>
-      <li>On this workload the artifact&rsquo;s contribution was <strong class="lose">negative and
+      <li>Against <em>measurement-only</em> and <em>misleading-docs</em> questions the artifact wins
+      decisively; against a well-documented machine, web search matches a curated
+      declared summary <strong>exactly</strong>.</li>
+      <li>On this workload the artifact&rsquo;s contribution to runtime was <strong class="lose">negative and
       significant</strong>, and its pre-registered mechanism was worth nothing.</li>
       <li>The failure is <strong>regime mismatch, not bad data</strong>. Every number in the
       briefing is correct.</li>
