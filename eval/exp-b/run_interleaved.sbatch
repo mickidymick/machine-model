@@ -65,7 +65,11 @@ for c in "$SNAP/configs"/*.sh; do CONFIGS+=("$c"); done
 echo "=== exp-b: $BENCH, ${#CONFIGS[@]} configs, $PASSES passes, job $SLURM_JOB_ID ==="
 printf '  %s\n' "${CONFIGS[@]}"
 
-CSV="$OUT/${BENCH}_${STAMP}.csv"
+# ABSOLUTE. The header is written here at top level, but every row is appended
+# from inside `( cd "$tree" ... )`, so a relative path resolves against the arm
+# tree, the directory does not exist, and the append fails silently -- leaving a
+# file that exists, has a header, and contains no data.
+CSV="$ABSOUT/${BENCH}_${STAMP}.csv"
 echo "pass,config,seconds,solve_s,fom,work,ranks,threads,exit" > "$CSV"
 
 for p in $(seq 1 "$PASSES"); do
@@ -130,7 +134,15 @@ for p in $(seq 1 "$PASSES"); do
   done
 done
 
-echo; echo "=== raw results: $CSV ==="
+rows=$(( $(wc -l < "$CSV") - 1 ))
+if [ "$rows" -lt 1 ]; then
+  echo
+  echo "!! THE CSV IS EMPTY ($rows data rows) even though runs completed."
+  echo "   The per-run .log files in $ABSOUT are the real record; rebuild with:"
+  echo "     ./eval/exp-b/rebuild_csv.sh $BENCH $STAMP"
+fi
+
+echo; echo "=== raw results: $CSV ($rows data rows) ==="
 echo "Analyse with:  python3 $D/collect.py $CSV"
 echo
 echo "Before believing any of it, check the verification columns: a config that"
