@@ -317,6 +317,27 @@
   ol { max-width: 68ch; } ol li { margin: .4rem 0; }
   p { max-width: 68ch; }
   code { font-family: var(--f-data); font-size: .9em; }
+
+  .vgroup { border-left: 3px solid var(--rule); padding: .1rem 0 .1rem 1rem; margin: 1.5rem 0; }
+  .vgroup.measured { border-left-color: var(--measured); }
+  .vgroup.declared { border-left-color: var(--declared); }
+  .vgroup.critical { border-left-color: var(--critical); }
+  .vgroup.muted    { border-left-color: var(--ink-3); }
+  .vhead { display: flex; align-items: baseline; gap: .6rem; }
+  .vname { font: 600 .7rem/1.4 var(--f-data); letter-spacing: .14em; text-transform: uppercase; }
+  .measured .vname { color: var(--measured); }
+  .declared .vname { color: var(--declared); }
+  .critical .vname { color: var(--critical); }
+  .muted .vname    { color: var(--ink-3); }
+  .vcount { font: .7rem var(--f-data); color: var(--ink-3); }
+  .vblurb { margin: .35rem 0 .6rem; font-size: .92rem; color: var(--ink-2); max-width: 66ch; }
+  ul.vlist { list-style: none; margin: 0; padding: 0; }
+  ul.vlist li { display: grid; gap: .15rem .9rem; padding: .3rem 0; max-width: 74ch;
+                border-top: 1px solid var(--rule-soft); }
+  @media (min-width: 44rem) { ul.vlist li { grid-template-columns: 15.5rem 1fr; gap: .9rem; } }
+  ul.vlist li:first-child { border-top: none; }
+  ul.vlist code { font-family: var(--f-data); font-size: .82rem; color: var(--ink); }
+  ul.vlist span { font-size: .9rem; color: var(--ink-2); }
   footer { border-top: 1px solid var(--rule-soft); padding-top: 1rem; margin-top: 3rem; }
   table.scores { border-collapse: collapse; margin: 1.1rem 0 .6rem; font-size: .93rem; }
   table.scores th, table.scores td {
@@ -611,6 +632,69 @@
     <strong>access pattern under which each number was obtained</strong> as a first-class,
     matchable field &mdash; something a reader must reconcile against its own workload
     &mdash; rather than as prose it is asked to honour.</p>
+  </section>
+
+
+  <section id="inventory">
+    <h2>What is actually in the artifact</h2>
+    <p>Sixteen claims, one schema, the same questions asked of every machine. Each
+    carries a <b>verdict</b> &mdash; how the machine&rsquo;s own description held up against
+    measurement. Empty slots are expected and are part of the record.</p>
+    <div class="vgroup measured">
+      <div class="vhead"><span class="vname">confirmed</span><span class="vcount">4</span></div>
+      <p class="vblurb">The machine tells the truth. This is the control &mdash; without it, &ldquo;firmware is unreliable&rdquo; would be an unfalsifiable complaint.</p>
+      <ul class="vlist">
+        <li><code>cpu.cache_hierarchy</code><span>Sets blocking targets. Also calibrates our own latency tool against known hardware.</span></li>
+        <li><code>numa.domain_count</code><span>The unit of memory placement. Everything downstream assumes it.</span></li>
+        <li><code>gpu.interconnect_cost</code><span>Decides which device pairs should hold communicating partners.</span></li>
+        <li><code>gpu.memory_hierarchy</code><span>Kernel blocking targets, and validates the GPU probe.</span></li>
+      </ul>
+    </div>
+    <div class="vgroup declared">
+      <div class="vhead"><span class="vname">misleading</span><span class="vcount">3</span></div>
+      <p class="vblurb">Declared sources disagree with <em>each other</em>. A user who runs the right tool gets the right answer; one who reads the vendor diagram does not.</p>
+      <ul class="vlist">
+        <li><code>cpu.core_inventory</code><span>Sets <code>-c</code> and ranks per node. Wrong either wastes the allocation or gets the job rejected.</span></li>
+        <li><code>gpu.device_inventory</code><span>Packages vs schedulable GCDs &mdash; a standing source of 2&times; errors in rank counts.</span></li>
+        <li><code>net.nic_inventory</code><span>Decides whether a measured bandwidth is per-link or per-node. A factor-of-N error either way.</span></li>
+      </ul>
+    </div>
+    <div class="vgroup critical">
+      <div class="vhead"><span class="vname">contradicted</span><span class="vcount">3</span></div>
+      <p class="vblurb">The machine states something false. This is the category the project exists for.</p>
+      <ul class="vlist">
+        <li><code>numa.distance_matrix</code><span>Linux exposes this through <code>numa_distance()</code>. Placement, migration and binding tools all read it.</span></li>
+        <li><code>numa.symmetry</code><span>Direction matters here, and a scalar distance cannot express that at all &mdash; not miscalibrated, structurally insufficient.</span></li>
+        <li><code>mem.page_backing</code><span>Silent failure invalidates every latency measured afterwards, and the result still looks plausible.</span></li>
+      </ul>
+    </div>
+    <div class="vgroup measured">
+      <div class="vhead"><span class="vname">undeclared</span><span class="vcount">4</span></div>
+      <p class="vblurb">Nothing published answers these. Measurement is the only source &mdash; and the only place the artifact is not competing with a search engine.</p>
+      <ul class="vlist">
+        <li><code>cost.page_size_penalty</code><span>Not a constant: zero while the TLB covers the working set, spikes when TLB reach fails, then settles. <b>This is the one that inverted in Experiment&nbsp;B.</b></span></li>
+        <li><code>cost.loaded_latency_knee</code><span>Peak and usable bandwidth are different operating points, often far apart.</span></li>
+        <li><code>cost.host_device_transfer</code><span>Device vs host staging changes sign with message size. One measurement gives the wrong universal answer.</span></li>
+        <li><code>cost.contention_sensitivity</code><span>Characterising an idle node describes a machine nobody runs on.</span></li>
+      </ul>
+    </div>
+    <div class="vgroup muted">
+      <div class="vhead"><span class="vname">unfalsifiable here</span><span class="vcount">1</span></div>
+      <p class="vblurb">We probed it and the probe could not discriminate. Recorded as such rather than quietly dropped.</p>
+      <ul class="vlist">
+        <li><code>gpu.numa_affinity</code><span>Drives <code>--gpu-bind=closest</code> and every host-buffer placement. Two probes failed to separate the domains.</span></li>
+      </ul>
+    </div>
+    <div class="vgroup muted">
+      <div class="vhead"><span class="vname">untested</span><span class="vcount">1</span></div>
+      <p class="vblurb">Known to matter, not yet measured. Listed so the gap is visible rather than implied.</p>
+      <ul class="vlist">
+        <li><code>cpu.system_interference</code><span>The question binding tools exist to answer: which resources to keep an application off.</span></li>
+      </ul>
+    </div>
+    <p class="cap">Declared values are <b>never overwritten</b>; measured values sit
+    alongside them. Overwriting would destroy the evidence that anything reading
+    <code>numa_distance()</code> is wrong, which is the finding.</p>
   </section>
 
   <footer class="muted">
