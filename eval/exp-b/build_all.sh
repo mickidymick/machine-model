@@ -61,21 +61,27 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
       source /usr/share/lmod/lmod/init/bash 2>/dev/null || true
       bash ./SOLUTION.sh build ) > "$blog" 2>&1
   }
+  # Up to 3 attempts. The Cray wrapper shells out to pkg-config on every
+  # compile, and on a busy login node it has been seen to die with "Bus error
+  # (core dumped) ... Error invoking pkg-config!" on arbitrary translation units
+  # while the identical command succeeds for other configs in the same loop.
+  # A degraded environment also leaves CRAY_LIBSCI_PREFIX_DIR unset, which turns
+  # into a FindLAPACK failure on the NEXT attempt -- a different error from the
+  # same cause, which is why matching on the pkg-config signature alone was not
+  # enough. Retry on ANY failure: a config that genuinely cannot build fails all
+  # three times, and the missing-binary guard below still stops the run.
+  attempt=1
   do_build
   rc=$?
-  # ONE retry, only for the transient case. The Cray wrapper shells out to
-  # pkg-config on every compile, and on a busy login node that has been seen to
-  # die with "Bus error (core dumped) ... Error invoking pkg-config!" on
-  # arbitrary translation units while the identical command succeeds for other
-  # configs in the same loop. That is a flaky node, not a bad config, and it
-  # silently produced two unrunnable arms in job 5260676. Retry once and say so.
-  # No further retries: a config that genuinely cannot build must fail loudly.
-  if [ $rc -ne 0 ] && grep -qE 'Error invoking pkg-config|Bus error' "$blog" 2>/dev/null; then
-    echo "    transient pkg-config/bus error -- retrying once"
+  while [ $rc -ne 0 ] && [ $attempt -lt 3 ]; do
+    attempt=$((attempt+1))
+    echo "    build failed (exit $rc) -- attempt $attempt of 3"
+    sleep 5
     rm -rf "$tree/build"
     do_build
     rc=$?
-  fi
+  done
+  [ $attempt -gt 1 ] && [ $rc -eq 0 ] && echo "    succeeded on attempt $attempt"
   # NOT `echo $?` after a pipeline: that reports tail's status, which is always
   # 0, so every failed build announced success.
   tail -5 "$blog"
