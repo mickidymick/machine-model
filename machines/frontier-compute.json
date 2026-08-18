@@ -840,6 +840,79 @@
       "evidence": [
         "declared/frontier-compute.hwloc.xml"
       ]
+    },
+    {
+      "claim": "storage.tier_inventory",
+      "verdict": "misleading",
+      "probe_validated": "yes",
+      "confidence": "high",
+      "declared": {
+        "source": "df on a compute node, plus the `nvme` Slurm node feature",
+        "df_shows": "/tmp, /dev/shm and /rootfs.rw each ~252 G \"available\"",
+        "nvme_feature": "advertised on every node by sinfo",
+        "implication": "reads as ~252 G of node-local scratch disk available to any job"
+      },
+      "measured_under": {
+        "node": "frontier06028 default allocation, and a second node under -C nvme",
+        "date": "2026-08-18",
+        "method": "df -hT, lsblk, and a write test"
+      },
+      "measured": {
+        "tiers": [
+          {
+            "tier": "node-local NVMe",
+            "path": "/mnt/bb/$USER",
+            "device": "/dev/mapper/nvme-bb",
+            "fs": "xfs",
+            "size": "3.4 TB",
+            "access": "REQUIRES #SBATCH -C nvme; absent otherwise",
+            "lifetime": "the job"
+          },
+          {
+            "tier": "Lustre orion, performance pool",
+            "path": "$MEMBERWORK / $PROJWORK",
+            "fs": "lustre",
+            "access": "default layout for files 256 KiB - 8 MiB",
+            "osts": 1350
+          },
+          {
+            "tier": "Lustre orion, capacity pool",
+            "path": "$MEMBERWORK / $PROJWORK",
+            "fs": "lustre",
+            "access": "default layout for files 8 MiB - 128 GiB, ONE stripe"
+          },
+          {
+            "tier": "MDT (Data-on-MDT)",
+            "path": "same",
+            "access": "default layout for files < 256 KiB; never touches an OST"
+          },
+          {
+            "tier": "tmpfs",
+            "path": "/tmp, /dev/shm",
+            "fs": "tmpfs",
+            "size": "252 G limit",
+            "note": "THIS IS RAM. Bytes written count against node memory."
+          },
+          {
+            "tier": "NFS",
+            "path": "$HOME (/ccs/home)",
+            "fs": "nfs",
+            "note": "not Lustre; lfs exits 25. Not for bulk I/O."
+          }
+        ]
+      },
+      "not_measured": [
+        "Bandwidth of any tier -- this claim is inventory only. See cost.storage_bands.",
+        "Whether the NVMe is shared with other jobs on the same node.",
+        "Metadata rates on any tier."
+      ],
+      "mechanism": "The NVMe device exists on every node but is only mapped into the job when the nvme constraint is requested. df therefore reports the tmpfs overlay in a default allocation, and a tmpfs size limit is not free storage: it is a ceiling on how much RAM the job may convert into apparent disk.",
+      "margin": "3.4 TB of local disk is invisible without one constraint flag, while 252 G of RAM is displayed as though it were disk.",
+      "consequence": "A job writing bulk per-rank output to /tmp consumes node memory and dies out of memory, with the failure appearing to be in the application. A job that could have staged 3.4 TB locally instead writes it to a single Lustre stripe.",
+      "evidence": [
+        "results-frontier/stor_5303397.out",
+        "~/nvme_test.out (job 5303420)"
+      ]
     }
   ],
   "flagged": [
@@ -924,8 +997,8 @@
     {
       "id": "tmp-is-ram-not-disk",
       "symptom": "`df -h /tmp` on a compute node reports ~252 G available, so it reads as a generous node-local scratch disk. A job that writes tens or hundreds of GB there dies out of memory, and the failure points at the application rather than at the write.",
-      "cause": "/tmp, /dev/shm and /rootfs.rw are all tmpfs on Frontier compute nodes -- they are RAM. Every byte written counts against the node memory the job is using. The 252 G figure is a tmpfs size limit, not free storage. /var/tmp and /mnt/bb are overlay, and /mnt/bb is NOT writable by default despite every node advertising the `nvme` Slurm feature, so the NVMe appears to have to be requested explicitly rather than being mounted for free.",
-      "remedy": "Write bulk output to $MEMBERWORK or $PROJWORK (Lustre). Use /tmp only for small, transient files and count what you put there against your memory budget. To use node-local NVMe, request it -- verify the mechanism before relying on it; /mnt/bb/$USER did not exist in a default allocation.",
+      "cause": "/tmp, /dev/shm and /rootfs.rw are all tmpfs on Frontier compute nodes -- they are RAM. Every byte written counts against the node memory the job is using. The 252 G figure is a tmpfs size limit, not free storage. /var/tmp and /mnt/bb are overlay, and /mnt/bb is NOT writable by default despite every node advertising the `nvme` Slurm feature, VERIFIED 2026-08-18: `-C nvme` mounts /dev/mapper/nvme-bb, an xfs filesystem of 3.4 TB, at /mnt/bb/$USER and it is writable. Without that constraint the device is present but unmounted, so df shows only the tmpfs and a user reading df gets the wrong answer twice: /tmp looks like local disk and is RAM, while 3.4 TB of real local disk is invisible.",
+      "remedy": "Write bulk output to $MEMBERWORK or $PROJWORK (Lustre), or request node-local NVMe with `#SBATCH -C nvme` and use /mnt/bb/$USER. Use /tmp only for small transient files and count them against the memory budget.",
       "sting": "Observed on frontier06028, 2026-08-18. $HOME is NFS and not Lustre either (lfs exits 25 there), so neither of the two paths a user reaches for by habit is the right one for bulk I/O."
     }
   ],

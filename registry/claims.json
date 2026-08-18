@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.3",
+  "registry_version": "0.4",
   "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
   "verdicts": {
     "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
@@ -466,6 +466,28 @@
       "verdict_rule": "confirmed if elevated jitter and interrupt counts fall only on cores the declarations already reserve. contradicted if cores outside the reserved set carry either -- the reservation is then incomplete, and a user following the documentation still lands on a noisy core. misleading if the declared sources disagree with each other.",
       "consequence_if_wrong": "Ranks placed on cores the system is quietly using. The cost appears as tail latency and load imbalance at scale, which is attributed to the application rather than to placement.",
       "portability": "Universal, and the answer is expected to differ on every machine -- reservation policy is a site decision, not a hardware property. Device locality is already answerable offline from the exported hwloc XML."
+    },
+    {
+      "id": "storage.tier_inventory",
+      "domain": "storage",
+      "declares": "What storage tiers a job can reach, their type and capacity, and what it must do to reach each one.",
+      "declared_source": {
+        "primary": "df on a compute node",
+        "fallback": "facility documentation, scheduler node features"
+      },
+      "why_it_matters": "A simulation exists to write data. df is the first thing anyone runs and it can be wrong in both directions at once -- showing RAM as though it were disk, while real local disk is unmounted and invisible. Neither error is recoverable from df alone.",
+      "probe": {
+        "id": "storage-locate",
+        "tool": "scripts/20_storage_locate.sh, run on a COMPUTE node; plus one allocation per scheduler constraint that might mount additional storage",
+        "rationale": "Filesystem TYPE is the discriminator, not size. A tmpfs and an xfs report identically in df -h; only df -hT and lsblk separate them.",
+        "conditions": {
+          "node_type": "compute, not login -- they differ",
+          "constraints": "run once with no constraint and once with each storage-related node feature the scheduler advertises"
+        }
+      },
+      "verdict_rule": "misleading if df in a default allocation reports a tier that is not what it appears to be, or omits a tier the job could have had. contradicted if a documented tier is absent. confirmed if df alone yields the correct picture.",
+      "consequence_if_wrong": "Bulk output written to RAM, exhausting node memory with the failure appearing to be in the application; or local disk left unused while every rank writes across the network.",
+      "portability": "Universal. Every machine has a storage hierarchy and df describes it incompletely on most of them."
     }
   ]
 }
