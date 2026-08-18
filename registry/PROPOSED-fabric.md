@@ -202,3 +202,62 @@ obtainable.
 cabinet, or a dragonfly group. The measurement does not depend on the answer —
 same-switch vs cross-switch is a real distinction regardless — but the
 `mechanism` field does, and mechanism is what makes a number safe to reuse.
+
+---
+
+# PHASE 1 RESULT — 2026-08-18, job 5302124, 16 nodes, 240 pairs
+
+**The cross-switch class is uniform.** 240 of 240 pairs usable.
+
+| | mean | sd | min | max |
+|---|---|---|---|---|
+| 8 B latency | 3.68 us | 0.03 (0.7%) | 3.47 | 3.73 |
+| 1 MiB bandwidth | 21975 MB/s | 170 (0.8%) | 20539 | 22308 |
+
+One tight mode, 3.63–3.73 us, plus two pairs at 3.47. The widest gap isolates
+only those two, which is an outlier and not a mode.
+
+Switch-name families are indistinguishable: s20xs20 3.68, s21xs21 3.67,
+s20xs21 3.68. **If those families were dragonfly groups, cross-family pairs
+would cost more. They do not.**
+
+## Our own hypothesis is falsified, and that is the result
+
+Phase 0 proposed that Slurm's two-level tree is structurally insufficient for a
+dragonfly, the same way a scalar SLIT distance cannot express the NUMA asymmetry
+we measured. **At the scale sampled, it is not.** Slurm asserts every
+cross-switch pair is equivalent, and to 0.7% they are.
+
+That makes `cost.fabric_distance` a **`confirmed`** verdict on a declared model —
+the category that turns "declared data is unreliable" from a slogan into a
+falsifiable claim. Four of the artifact's claims are confirmed and they are what
+make the three contradicted ones credible.
+
+## What this result does NOT cover
+
+**The allocation was compact.** Sixteen contiguous switches, s2000–s2011 and
+s2100–s2104, node IDs 96–2108: **20% of the machine, 2 of 7 switch families.**
+No genuinely distant pair (s2000 to s2600) was sampled. Uniformity across a
+compact region does not establish uniformity across the machine, and the
+dragonfly's global links are exactly what a compact allocation avoids.
+
+**The machine was 95% occupied** — 9404 of 9856 nodes running, 1487 jobs
+pending. Under that load, congestion is a live alternative explanation:
+if every path is contended, topology differences wash out. The measurement is
+arguably more *useful* for being taken under realistic load, but it cannot
+distinguish "the fabric is flat" from "the fabric was saturated".
+
+**No same-switch pairs at all.** All 240 were cross-switch, so there is still no
+near baseline and no measured answer to what `--switches=1` would buy.
+
+`not_measured`: distant pairs across the full node range · a quiet machine ·
+same-switch · message sizes other than 8 B and 1 MiB · collectives · GPU buffers.
+
+## What would settle it
+
+Repeat runs accumulating coverage, recording which switch regions each
+allocation touched, until either a distant pair shows a difference or the
+uniform region is wide enough to claim machine-wide. Plus one run at low
+occupancy, and one `--switches=1` for the near baseline. The variance across
+those runs is itself part of the entry — this is the only claim in the artifact
+whose value legitimately depends on what other users are doing.
