@@ -131,3 +131,74 @@ Phase 0 is cheap and might kill the whole claim. If node position is not
 discoverable from inside a job, then no application could act on the cost matrix
 even if we measured it, and the right answer is to record that and move to
 storage or SMT instead. Finding that out costs one small allocation.
+
+---
+
+# PHASE 0 RESULT — 2026-08-18, job 5301870, 16 nodes
+
+## The planned classification is unavailable
+
+`/etc/cray/xname`, `/proc/cray_xt/cname`, `/proc/cray_xt/nid` and `CRAY_XNAME`
+are **all empty on all 16 nodes**. A user job cannot learn its physical
+position. The cabinet-based grouping this claim was designed around is dead.
+
+## Slurm's topology replaces it, and is a better source
+
+```
+SwitchName=root  Level=1  Nodes=frontier[00001-09472,10113-10496]
+SwitchName=s2000 Level=0  Nodes=frontier[00001-00128]
+SwitchName=s2001 Level=0  Nodes=frontier[00129-00256]
+...
+SwitchName=s2611 Level=0  Nodes=frontier[10369-10496]
+```
+
+**77 Level=0 switches × 128 nodes = 9856**, matching the machine's node count
+exactly. Contiguous blocks in switch-name order. Available on a login node with
+no allocation, it is what Slurm itself uses for placement, and a job can act on
+it via `--switches`. Captured as a declared source alongside the hwloc XML.
+
+## Default allocations provide zero co-location
+
+The 16-node allocation landed on **16 distinct switches**: 120 pairs, **0
+same-switch, 120 cross-switch**. Spanning three switch-name families
+(s20xx, s21xx, s22xx).
+
+If that is typical, every multi-node job on this machine is scattered, and the
+near class cannot be measured without `--switches=1`.
+
+## The finding that matters: Slurm declares a TREE for a DRAGONFLY
+
+Slurm's model is `root → 77 switches → 128 nodes`. A two-level tree asserts that
+**every cross-switch pair is equivalent**. Frontier is a Slingshot dragonfly,
+where same-group and cross-group links are not equivalent.
+
+If group structure exists, **Slurm's topology model cannot express it** — the
+same structural insufficiency as `numa.symmetry`, where a scalar distance cannot
+represent an asymmetric cost. Not miscalibration; the wrong shape of model.
+
+This is a hypothesis until measured, and it is measurable.
+
+## Phase 1, sharpened — and now cheap
+
+The question is no longer "which pairs are near." It is:
+
+> **Is the cross-switch class uniform?**
+
+Measure many cross-switch pairs across the message-size range and look at the
+distribution. **Unimodal** → the fabric is flat at this scale, Slurm's model is
+adequate, and the claim resolves as `confirmed` for a declared source that
+happens to be sufficient. **Multimodal** → there is group structure Slurm cannot
+represent, and every job on the machine is being placed by a model that cannot
+see it.
+
+**This needs no `--switches=1`.** A default 16-node allocation already yields 120
+cross-switch pairs spanning three switch-name families. If those families
+correspond to groups, the structure appears as clustering in the pair costs.
+`--switches=1` remains worth doing for the same-switch baseline, but it is no
+longer a blocker, and the measurement runs on an allocation that is always
+obtainable.
+
+**Ask OLCF** whether a Slurm switch here is a physical Slingshot switch, a
+cabinet, or a dragonfly group. The measurement does not depend on the answer —
+same-switch vs cross-switch is a real distinction regardless — but the
+`mechanism` field does, and mechanism is what makes a number safe to reuse.
