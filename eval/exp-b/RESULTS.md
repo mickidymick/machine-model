@@ -168,3 +168,53 @@ domains, coarsening placement and forcing remote reads. Testing it is future wor
   about BLAS. Recorded because it was briefly counted as evidence.
 - Only **two distinct binaries** exist across all nine configurations, split
   exactly on the huge-page relink (1226920 vs 1226960 bytes).
+
+---
+
+# CORRECTION — 2026-08-18. The defect is more specific than first recorded.
+
+The write-up above says the conditions were stated and the model misapplied the
+number anyway. That is true but imprecise, and the precise version is a better
+finding.
+
+**What the treatment arm actually read** (render of `cost.page_size_penalty`):
+
+```
+- regime variable: working set size
+- regimes:
+  - extent 32 MB, huge 13.3, 4K 32.2, delta 18.9, ratio 2.4x, reason PEAK...
+  - extent 64 MB - 1 GB, huge 58-89, 4K 67-103, delta 9-14...
+
+Note: Latency effect only. Streaming bandwidth barely notices page size --
+107,765 huge vs 107,342 4K on corsys4 -- because sequential reads amortise the
+walk across a whole page.
+```
+
+**What the treatment arm wrote:**
+
+> the 4K penalty peaks at 2.4x for a ~32 MB working set (the 1536^2 determinant
+> matrices are 19 MB) and settles to a +9-14 ns offset from 64 MB-1 GB (the
+> 750 MB spline table)
+
+It matched its working set against the declared regime variable, **correctly**.
+It did exactly what the structure told it to do.
+
+**The defect: the artifact declared ONE regime variable and there were two.**
+`regime_variable: "working set size"` is singular and authoritative. The
+access-pattern dependency appears only as a trailing prose `Note`, and that note
+is phrased in terms of the *measurement metric* — "streaming **bandwidth** barely
+notices" — rather than a property a reader can recognise in their own kernel.
+Mapping "my spline kernel streams contiguous chunks" onto "streaming bandwidth
+barely notices page size" requires a translation the structured fields never
+asked for.
+
+**So the conclusion is not "prose caveats are insufficient" but something
+sharper: a structured field that names the regime variable is an assertion that
+those are THE regime variables.** A reader that trusts the structure — which is
+the whole point of structuring it — will not go looking for a second axis
+hiding in a footnote.
+
+This is why `measured_under` must be a matchable record of the conditions rather
+than a prose note, and why `regime_variable` must be a list. It also raises the
+bar for the retrofit: every existing cost claim needs asking "what else did we
+hold fixed that we never declared?", not just "did we write down the conditions".
