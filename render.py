@@ -194,6 +194,28 @@ def main(argv):
             w()
             w(c['why_it_matters'])
             w()
+
+            # Conditions BEFORE the value, deliberately. These used to render
+            # after it, in the same trailing position as `note` -- and in
+            # Experiment B an agent read the curve, matched its working set, and
+            # never reached the caveat that the mechanism does not apply to its
+            # access pattern. A qualifier printed after a number is read after
+            # the number is already anchored.
+            if r.get('measured_under'):
+                w('**Measured under** — this value holds under these conditions '
+                  'and is not known to hold outside them:')
+                for k, v in r['measured_under'].items():
+                    w(f"  - {k.replace('_', ' ')}: {v}")
+                w()
+            if r.get('not_measured'):
+                w('**NOT measured** — no value here, in either direction:')
+                for x in r['not_measured']:
+                    w(f"  - {x}")
+                w()
+            if r.get('mechanism'):
+                w(f"**Mechanism**: {r['mechanism']}")
+                w()
+
             flatten(r['measured'], 0)
             w()
             if r.get('margin'):
@@ -204,8 +226,7 @@ def main(argv):
                                ('practical', 'Practical reading'),
                                ('cross_validation', 'Cross-validation'),
                                ('note', 'Note'),
-                               ('open', 'Open'),
-                               ('not_measured', 'Not measured')):
+                               ('open', 'Open')):
                 if r.get(key):
                     w(f"**{label}**: {r[key]}")
                     w()

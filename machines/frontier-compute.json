@@ -564,8 +564,11 @@
       "confidence": "high",
       "declared": null,
       "measured": {
+        "regime_variables": [
+          "working set size",
+          "access pattern"
+        ],
         "unit": "ns",
-        "regime_variable": "working set size",
         "regimes": [
           {
             "extent": "<=256 KB",
@@ -615,7 +618,23 @@
         "results-frontier/cpu_curve.txt",
         "results-frontier/cpu_curve_4k.txt"
       ],
-      "note": "Latency effect only. Streaming bandwidth barely notices page size -- 107,765 huge vs 107,342 4K on corsys4 -- because sequential reads amortise the walk across a whole page."
+      "note": "MEASURED CONSEQUENCE OF MISAPPLYING THIS: in Experiment B (2026-08-13) an agent matched its working set against the curve above -- correctly, per the declared regime variable -- and enabled huge pages for a streaming kernel. It cost 2.7% (p=3e-10). The number did not fail to transfer; it inverted. That is why regime_variables is a list and why measured_under exists.",
+      "measured_under": {
+        "access_pattern": "dependent random (pointer chase) -- each load depends on the previous",
+        "working_set": "swept, 256 KB to 1 GB; the 2.4x is at 32 MB",
+        "threads": 1,
+        "placement": "single NUMA domain, first touch",
+        "traffic": "read-only",
+        "node_state": "idle",
+        "page_sizes": "4 KB vs 2 MB"
+      },
+      "not_measured": [
+        "streaming / sequential access -- the regime where the mechanism does not apply. A corsys4 bandwidth check (107,765 huge vs 107,342 4K) suggests no effect, but that is a different machine and a bandwidth metric, so it does not settle the latency question here.",
+        "multi-threaded first touch across a 2 MB page boundary -- a 2 MB page can span data first-touched by threads on different NUMA domains, which coarsens placement",
+        "write or mixed traffic",
+        "under memory load from co-resident ranks"
+      ],
+      "mechanism": "The penalty comes from TLB reach failure on accesses that cannot be prefetched. 32 MB needs 8192 PTEs at 4 KB, far past the ~8 MB L2 TLB reach, so every access pays a page walk that itself misses to memory. It exists only where BOTH hold: the working set exceeds TLB reach, AND the access pattern defeats prefetch. A kernel that streams contiguously amortises the walk across the whole page and should expect no benefit -- and, measured on miniQMC, a 2.7% PENALTY."
     },
     {
       "claim": "cost.loaded_latency_knee",
@@ -624,6 +643,10 @@
       "confidence": "high",
       "declared": null,
       "measured": {
+        "regime_variables": [
+          "injection delay (offered load)",
+          "traffic read/write mix"
+        ],
         "conditions": {
           "threads": "1 latency + 27 bandwidth",
           "traffic": "read-only",
@@ -652,7 +675,18 @@
       "cross_validation": "Idle floor 89.0 ns agrees with ptrchase huge-page local (85.9 ns) and the cache curve DRAM plateau (87.9 ns) -- three measurements, two independent tools, within 3.5%.",
       "method_note": "The original 19-point sweep placed both knee endpoints inside a single gap and rendered the entire transition as one vertical jump. Densifying across 48-96 is what made the operating point visible.",
       "open": "A 400 ns step remains between delay 52 and 56. The transition is genuinely sharp but has not been proven with points inside it.",
-      "not_measured": "Read/write mix. This probe sweeps read-only traffic; MLC sweeps ratios. Write traffic saturates differently."
+      "not_measured": [
+        "Read/write mix. This probe sweeps read-only traffic; MLC sweeps ratios. Write traffic saturates differently, and hwloc defines an empty WriteLatency slot waiting for it.",
+        "Whether the knee moves with page size or NUMA placement -- neither was varied."
+      ],
+      "measured_under": {
+        "traffic": "read-only",
+        "regime_swept": "injection delay, densified across 48-96 after the original 19-point sweep hid the knee",
+        "node_state": "idle apart from the load generator",
+        "placement": "NOT RECORDED at measurement time -- recovered from evidence files if at all",
+        "page_size": "NOT RECORDED at measurement time -- recovered from evidence files if at all"
+      },
+      "mechanism": "Latency rises steeply near saturation because queueing delay grows without bound as utilisation approaches 1, while delivered bandwidth is already asymptotically flat. The knee is where that queueing term starts to dominate. It is a property of the memory controllers under READ load; a different read/write mix moves it."
     },
     {
       "claim": "cost.host_device_transfer",
@@ -661,7 +695,10 @@
       "confidence": "high",
       "declared": null,
       "measured": {
-        "regime_variable": "message size",
+        "regime_variables": [
+          "message size",
+          "buffer residency (host vs device)"
+        ],
         "at_4MiB": {
           "host_MBs": 22635.8,
           "host_spread": 8.1,
@@ -699,7 +736,20 @@
         "results-frontier/internode_repeat.txt",
         "results-frontier/hugepage_internode.txt"
       ],
-      "practical": "Bandwidth turns positive at 16 KB, latency not until 256 KB -- a streaming benchmark keeps messages in flight and amortises the fixed cost, a ping-pong pays it every round trip. Production GPU HPC and LLM training move megabytes and sit far above both crossovers. The small-message penalty applies to halo exchanges and small collectives."
+      "practical": "Bandwidth turns positive at 16 KB, latency not until 256 KB -- a streaming benchmark keeps messages in flight and amortises the fixed cost, a ping-pong pays it every round trip. Production GPU HPC and LLM training move megabytes and sit far above both crossovers. The small-message penalty applies to halo exchanges and small collectives.",
+      "measured_under": {
+        "pattern": "ping-pong (osu_latency) and streaming (osu_bw) reported separately -- the crossover differs between them, which is why both are recorded",
+        "scope": "inter-node",
+        "node_state": "idle",
+        "gcd_selection": "NOT RECORDED at measurement time -- recovered from evidence files if at all",
+        "memory_type": "device-resident vs host-staged; pinned/pageable NOT RECORDED at measurement time -- recovered from evidence files if at all"
+      },
+      "not_measured": [
+        "Intra-node device-to-device transfer -- this claim is inter-node only.",
+        "Under network load from other users, and the fabric is shared.",
+        "Whether the crossover moves with GCD choice or NUMA placement of the host buffer."
+      ],
+      "mechanism": "Device buffers avoid a staging copy but pay a fixed per-transfer setup that host staging does not. Below the crossover the fixed cost dominates and staging wins; above it the avoided copy dominates and device wins. The crossover therefore sits wherever those two costs cross, which is why it differs between ping-pong and streaming: a streaming benchmark keeps messages in flight and amortises the fixed cost."
     },
     {
       "claim": "cost.contention_sensitivity",
@@ -730,6 +780,14 @@
         "results-frontier/contention2.txt",
         "results-frontier/ct_dd_load_p1..p2.txt",
         "results-frontier/ct_hh_load_p1..p2.txt"
+      ],
+      "measured_under": {
+        "status": "CONFOUNDED -- probe_validated is no, confidence low. These conditions describe an attempt, not a measurement.",
+        "load_generator": "shared the cores under test rather than being pinned off them; that is the confound",
+        "traffic": "NOT RECORDED at measurement time -- recovered from evidence files if at all"
+      },
+      "not_measured": [
+        "Everything. This claim has no usable value in any regime. It is retained because a characterization on an idle node describes a machine nobody runs on, and recording the failed attempt is more honest than an empty slot."
       ]
     },
     {

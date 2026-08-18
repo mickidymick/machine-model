@@ -77,6 +77,15 @@ def main(argv):
 
     # ---- 1. integrity -------------------------------------------------
     problems = []
+
+    # A cost claim with no measured_under is the Experiment B defect exactly: a
+    # value whose conditions are undeclared, which a reader will therefore treat
+    # as unconditional. Reported, not fatal -- the retrofit is in progress and a
+    # hard failure would only get worked around.
+    undeclared_conditions = [
+        r['claim'] for r in desc['results']
+        if r['claim'].startswith('cost.') and not r.get('measured_under')
+    ]
     for cid in results:
         if cid not in claims:
             problems.append(f"result for unknown claim id: {cid}")
@@ -111,6 +120,17 @@ def main(argv):
     else:
         print(f"{C['ok']}integrity ok{C['r']} -- "
               f"{len(claims)} claims, all answered\n")
+
+    if undeclared_conditions:
+        print(f"cost claims with no measured_under ({len(undeclared_conditions)}):")
+        for c in undeclared_conditions:
+            print(f"  ~ {c}")
+        print("    A cost value whose conditions are undeclared reads as unconditional.")
+        print("    Experiment B measured what that costs: an agent matched its working")
+        print("    set against cost.page_size_penalty's declared regime variable --")
+        print("    correctly -- and applied a pointer-chase number to a streaming")
+        print("    kernel. It inverted: a 2.4x benefit became a 2.7% penalty.")
+        print()
 
     # ---- 2. fidelity --------------------------------------------------
     checked = [r for r in results.values()
