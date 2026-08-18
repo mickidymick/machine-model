@@ -89,6 +89,17 @@
           "unit": "ns"
         }
       },
+      "measured_under": {
+        "access": "dependent random (pointer chase) -- these are unloaded latencies",
+        "threads": 1,
+        "sampling": "one curve per NUMA domain (four), NOT one per L3 region (eight)",
+        "provenance": "same probe family as numa.distance_matrix (ptrchase); not separately recorded at the time, inferred from the campaign"
+      },
+      "not_measured": [
+        "Loaded latency -- see cost.loaded_latency_knee, which is the same hierarchy under load and gives very different numbers.",
+        "Bandwidth at each level.",
+        "The eight L3 regions independently; four domains were sampled and assumed representative."
+      ],
       "margin": "Every plateau boundary lands on the declared size. Curves were taken one per NUMA DOMAIN (four), not one per L3 region (eight) -- the four sampled curves agree, but the eight L3 regions were not sampled independently.",
       "evidence": [
         "results-frontier/cpu_curve.txt",
@@ -191,12 +202,6 @@
           "latency": "ns",
           "bandwidth": "MB/s"
         },
-        "conditions": {
-          "pages": "4K",
-          "threads": 1,
-          "access": "random",
-          "n": 3
-        },
         "local": {
           "latency": 101.5,
           "bandwidth": 44582
@@ -249,6 +254,13 @@
           }
         ]
       },
+      "conditions_caveat": "Measured on 4K pages because huge pages cannot be allocated on a remote domain here (see mem.page_backing). Absolute values run ~16 ns high; the local-vs-remote structure is unaffected.",
+      "measured_under": {
+        "pages": "4K",
+        "threads": 1,
+        "access": "random",
+        "n": 3
+      },
       "margin": "Near-to-far gap is 12.1 ns against a 1.2 ns noise floor (~10x), and 1353 MB/s against 289 MB/s (~4.7x). Two independently written tools -- one pointer-chasing, one streaming -- produce identical rank ordering across all six pairs, with perfect anti-correlation between latency and bandwidth.",
       "consequence": "Anything reading numa_distance() treats these four domains as interchangeable. Page placement and migration policy driven by the declared matrix systematically underestimates crossing cost.",
       "evidence": [
@@ -257,8 +269,7 @@
         "results-frontier/cpu_bwmatrix_r2.txt",
         "results-frontier/cpu_bwmatrix_r3.txt"
       ],
-      "note": "Magnitudes differ 4x between metrics: latency spans 11% across pairs (18% counting local), bandwidth only 3.5% (4.9%). A bandwidth-only study would reasonably call these domains interchangeable. Which metric you measure determines whether you see the topology at all.",
-      "conditions_caveat": "Measured on 4K pages because huge pages cannot be allocated on a remote domain here (see mem.page_backing). Absolute values run ~16 ns high; the local-vs-remote structure is unaffected."
+      "note": "Magnitudes differ 4x between metrics: latency spans 11% across pairs (18% counting local), bandwidth only 3.5% (4.9%). A bandwidth-only study would reasonably call these domains interchangeable. Which metric you measure determines whether you see the topology at all."
     },
     {
       "claim": "numa.symmetry",
@@ -280,6 +291,17 @@
           "bandwidth": 44263
         }
       },
+      "measured_under": {
+        "access": "dependent random (pointer chase)",
+        "pages": "4K",
+        "threads": 1,
+        "provenance": "same probe family as numa.distance_matrix (ptrchase); not separately recorded at the time, inferred from the campaign"
+      },
+      "not_measured": [
+        "Whether the direction of the asymmetry holds for streaming access, or for writes. Both metrics here are read.",
+        "Pairs other than 2/3 directionally -- only one pair was run both ways."
+      ],
+      "mechanism": "A scalar distance has one value per pair, so it cannot represent a difference between 2->3 and 3->2 at all. Whatever causes the asymmetry, the declared model has no slot to put it in -- which is the point of the claim.",
       "margin": "3.9 ns latency difference against a 1.2 ns floor (3.3x); 601 MB/s against 289 MB/s (2.1x). Both metrics agree on the direction -- 3->2 is better in both.",
       "consequence": "No scalar distance can express this. The declared model is not merely miscalibrated, it is structurally insufficient.",
       "evidence": [
@@ -344,24 +366,24 @@
       },
       "measured": {
         "probe": "gpu_ptrchase --hostmatrix, host memory bound per NUMA domain and verified with move_pages",
-        "conditions": {
-          "passes": 3,
-          "buffer": "512 MiB",
-          "cores": 56
-        },
         "outcome": "No GCD row separates the domains by more than run-to-run noise. Across-pass spread 29-155 ns vs across-domain range 27-175 ns.",
         "rule": "A row votes only when across-domain range exceeds 3x its worst across-pass spread. 0 of 8 rows cleared it."
       },
-      "margin": "0 of 8 rows can discriminate. Latency cannot resolve host-domain affinity on this machine with this probe.",
-      "consequence": "This is the claim --gpu-bind=closest depends on, and it is currently taken on faith from the same vendor whose CPU distance table is contradicted above.",
       "next_step": "Not a probe-design failure so much as an effect-size problem: if the affinity penalty exists it is smaller than 8% run-to-run GPU latency variance. More passes would shrink the error bars; a larger buffer or a bandwidth-under-load probe might raise the signal.",
-      "note": "The declared map is non-naive -- NUMA 0 pairs with GCD 4,5, not 0,1 -- which is precisely why it should not be assumed correct without measurement.",
       "aggregate_observation": {
         "statement": "Node 0 is the fastest host domain in 22 of 24 (GCD x pass) cells; chance is ~6. Column means 1250.6 / 1311.0 / 1331.7 / 1318.9 ns, a 60.5 ns margin.",
         "why_not_a_claim": "Uniform across GCDs. A real affinity effect would vary BY GCD and this does not. Leading explanation is our own probe: the task builds and memcpy's the 512 MiB chain on its main thread, unconfined under -c 56 and most likely resident on node 0.",
         "discriminator": "Re-run pinned to a different domain. If 'fastest' follows the thread it is our artifact; if it stays node 0 it is a machine property and deserves its own claim.",
         "status": "open"
-      }
+      },
+      "measured_under": {
+        "passes": 3,
+        "buffer": "512 MiB",
+        "cores": 56
+      },
+      "margin": "0 of 8 rows can discriminate. Latency cannot resolve host-domain affinity on this machine with this probe.",
+      "consequence": "This is the claim --gpu-bind=closest depends on, and it is currently taken on faith from the same vendor whose CPU distance table is contradicted above.",
+      "note": "The declared map is non-naive -- NUMA 0 pairs with GCD 4,5, not 0,1 -- which is precisely why it should not be assumed correct without measurement."
     },
     {
       "claim": "gpu.interconnect_cost",
@@ -378,10 +400,6 @@
       },
       "measured": {
         "unit": "ns",
-        "conditions": {
-          "n": 5,
-          "access": "random peer chase"
-        },
         "bands": [
           {
             "weight": 15,
@@ -411,6 +429,10 @@
             ]
           }
         ]
+      },
+      "measured_under": {
+        "n": 5,
+        "access": "random peer chase"
       },
       "margin": "No overlap between bands -- 79 ns of clear air between class 1 and 2, 139 ns between 2 and 3. Spacing is linear at ~10.8 ns per weight unit.",
       "evidence": [
@@ -456,6 +478,15 @@
           "cross_package": "37-77 GB/s"
         }
       },
+      "measured_under": {
+        "access": "dependent random (pointer chase) on device",
+        "scope": "single GCD, unloaded",
+        "provenance": "gpu_ptrchase; see gpu.interconnect_cost for the peer-access variant"
+      },
+      "not_measured": [
+        "Under concurrent kernel load.",
+        "Streaming / coalesced access, which is how most real GPU kernels touch HBM and which these latencies do not describe."
+      ],
       "margin": "L1 and L2 boundaries match the MI250X specification.",
       "evidence": [
         "results-frontier/gpu_curve.txt",
@@ -509,10 +540,6 @@
         ]
       },
       "measured": {
-        "conditions": {
-          "ranks_per_node": 1,
-          "nics_crossed": 1
-        },
         "host_to_host": {
           "latency_us": 2.38,
           "bandwidth_GBs": 22.6
@@ -539,6 +566,17 @@
           "note": "4-pair aggregate / 4 matches the 1-pair number within 0.5%."
         }
       },
+      "control": {
+        "question": "Does MPICH_OFI_NIC_POLICY=NUMA do the work, or does rank spread?",
+        "p4_numa_MBs": 90262.2,
+        "p4_default_MBs": 90148.4,
+        "difference": "0.13%",
+        "finding": "The policy does essentially NOTHING. What matters is spreading ranks across NUMA domains; the default policy then assigns NICs correctly on its own. Without this arm we would have credited the policy for a 4x speedup it had no part in -- and put that in the briefing as advice."
+      },
+      "measured_under": {
+        "ranks_per_node": 1,
+        "nics_crossed": 1
+      },
       "margin": "Scaling is linear to 4 pairs: 22.7 -> 45.1 -> 90.3 GB/s. The node reaches 90.3 GB/s, ~90% of the declared 100 GB/s. The July 23.9 GB/s was PER LINK and the spec is correct; only the natural single-pair benchmark misleads.",
       "consequence": "Quoting the single-pair result next to the 100 GB/s node spec looks like a 4x error. The declared number is correct; the natural benchmark configuration measures something else.",
       "evidence": [
@@ -548,14 +586,7 @@
         "results-frontier/nic_p2_numa_*.txt",
         "results-frontier/nic_p4_numa_*.txt",
         "results-frontier/nic_p4_default_*.txt"
-      ],
-      "control": {
-        "question": "Does MPICH_OFI_NIC_POLICY=NUMA do the work, or does rank spread?",
-        "p4_numa_MBs": 90262.2,
-        "p4_default_MBs": 90148.4,
-        "difference": "0.13%",
-        "finding": "The policy does essentially NOTHING. What matters is spreading ranks across NUMA domains; the default policy then assigns NICs correctly on its own. Without this arm we would have credited the policy for a 4x speedup it had no part in -- and put that in the briefing as advice."
-      }
+      ]
     },
     {
       "claim": "cost.page_size_penalty",
@@ -612,13 +643,6 @@
           }
         ]
       },
-      "margin": "Zero, then 2.4x, then a constant offset. There is no single number that describes this.",
-      "consequence": "TLB misses reported as memory latency. The worst case is at a working set that still fits in cache, which is exactly where a developer would not look for it.",
-      "evidence": [
-        "results-frontier/cpu_curve.txt",
-        "results-frontier/cpu_curve_4k.txt"
-      ],
-      "note": "MEASURED CONSEQUENCE OF MISAPPLYING THIS: in Experiment B (2026-08-13) an agent matched its working set against the curve above -- correctly, per the declared regime variable -- and enabled huge pages for a streaming kernel. It cost 2.7% (p=3e-10). The number did not fail to transfer; it inverted. That is why regime_variables is a list and why measured_under exists.",
       "measured_under": {
         "access_pattern": "dependent random (pointer chase) -- each load depends on the previous",
         "working_set": "swept, 256 KB to 1 GB; the 2.4x is at 32 MB",
@@ -634,7 +658,14 @@
         "write or mixed traffic",
         "under memory load from co-resident ranks"
       ],
-      "mechanism": "The penalty comes from TLB reach failure on accesses that cannot be prefetched. 32 MB needs 8192 PTEs at 4 KB, far past the ~8 MB L2 TLB reach, so every access pays a page walk that itself misses to memory. It exists only where BOTH hold: the working set exceeds TLB reach, AND the access pattern defeats prefetch. A kernel that streams contiguously amortises the walk across the whole page and should expect no benefit -- and, measured on miniQMC, a 2.7% PENALTY."
+      "mechanism": "The penalty comes from TLB reach failure on accesses that cannot be prefetched. 32 MB needs 8192 PTEs at 4 KB, far past the ~8 MB L2 TLB reach, so every access pays a page walk that itself misses to memory. It exists only where BOTH hold: the working set exceeds TLB reach, AND the access pattern defeats prefetch. A kernel that streams contiguously amortises the walk across the whole page and should expect no benefit -- and, measured on miniQMC, a 2.7% PENALTY.",
+      "margin": "Zero, then 2.4x, then a constant offset. There is no single number that describes this.",
+      "consequence": "TLB misses reported as memory latency. The worst case is at a working set that still fits in cache, which is exactly where a developer would not look for it.",
+      "evidence": [
+        "results-frontier/cpu_curve.txt",
+        "results-frontier/cpu_curve_4k.txt"
+      ],
+      "note": "MEASURED CONSEQUENCE OF MISAPPLYING THIS: in Experiment B (2026-08-13) an agent matched its working set against the curve above -- correctly, per the declared regime variable -- and enabled huge pages for a streaming kernel. It cost 2.7% (p=3e-10). The number did not fail to transfer; it inverted. That is why regime_variables is a list and why measured_under exists."
     },
     {
       "claim": "cost.loaded_latency_knee",
@@ -647,11 +678,6 @@
           "injection delay (offered load)",
           "traffic read/write mix"
         ],
-        "conditions": {
-          "threads": "1 latency + 27 bandwidth",
-          "traffic": "read-only",
-          "domain": 0
-        },
         "peak": {
           "bandwidth_MBs": 44521,
           "latency_ns": 832
@@ -666,27 +692,27 @@
           "latency_ns": 89
         }
       },
+      "cross_validation": "Idle floor 89.0 ns agrees with ptrchase huge-page local (85.9 ns) and the cache curve DRAM plateau (87.9 ns) -- three measurements, two independent tools, within 3.5%.",
+      "method_note": "The original 19-point sweep placed both knee endpoints inside a single gap and rendered the entire transition as one vertical jump. Densifying across 48-96 is what made the operating point visible.",
+      "measured_under": {
+        "threads": "1 latency + 27 bandwidth",
+        "traffic": "read-only",
+        "domain": 0,
+        "regime_swept": "injection delay, densified across 48-96 after the original 19-point sweep hid the knee",
+        "node_state": "idle apart from the load generator"
+      },
+      "not_measured": [
+        "Read/write mix. This probe sweeps read-only traffic; MLC sweeps ratios. Write traffic saturates differently, and hwloc defines an empty WriteLatency slot waiting for it.",
+        "Whether the knee moves with page size or NUMA placement -- neither was varied."
+      ],
+      "mechanism": "Latency rises steeply near saturation because queueing delay grows without bound as utilisation approaches 1, while delivered bandwidth is already asymptotically flat. The knee is where that queueing term starts to dominate. It is a property of the memory controllers under READ load; a different read/write mix moves it.",
       "margin": "98.3% of peak bandwidth is available at 2.7x lower latency. Between injection delay 52 and 56 latency collapses 634 -> 234 ns while bandwidth falls only 1.7%.",
       "consequence": "Tuning to saturate bandwidth costs a factor of 2.7 in latency for 1.7% of throughput.",
       "evidence": [
         "results-frontier/loaded_lat_dense.txt",
         "results-frontier/loaded_lat_n0_full.txt"
       ],
-      "cross_validation": "Idle floor 89.0 ns agrees with ptrchase huge-page local (85.9 ns) and the cache curve DRAM plateau (87.9 ns) -- three measurements, two independent tools, within 3.5%.",
-      "method_note": "The original 19-point sweep placed both knee endpoints inside a single gap and rendered the entire transition as one vertical jump. Densifying across 48-96 is what made the operating point visible.",
-      "open": "A 400 ns step remains between delay 52 and 56. The transition is genuinely sharp but has not been proven with points inside it.",
-      "not_measured": [
-        "Read/write mix. This probe sweeps read-only traffic; MLC sweeps ratios. Write traffic saturates differently, and hwloc defines an empty WriteLatency slot waiting for it.",
-        "Whether the knee moves with page size or NUMA placement -- neither was varied."
-      ],
-      "measured_under": {
-        "traffic": "read-only",
-        "regime_swept": "injection delay, densified across 48-96 after the original 19-point sweep hid the knee",
-        "node_state": "idle apart from the load generator",
-        "placement": "NOT RECORDED at measurement time -- recovered from evidence files if at all",
-        "page_size": "NOT RECORDED at measurement time -- recovered from evidence files if at all"
-      },
-      "mechanism": "Latency rises steeply near saturation because queueing delay grows without bound as utilisation approaches 1, while delivered bandwidth is already asymptotically flat. The knee is where that queueing term starts to dominate. It is a property of the memory controllers under READ load; a different read/write mix moves it."
+      "open": "A 400 ns step remains between delay 52 and 56. The transition is genuinely sharp but has not been proven with points inside it."
     },
     {
       "claim": "cost.host_device_transfer",
@@ -717,7 +743,6 @@
         },
         "small_message_penalty": "12-14% worse below 64 KB"
       },
-      "margin": "The 4 MiB bandwidth gap is 82x the across-pass spread; the latency gap is 30x. Device latency varied 0.02 us across three passes (0.011%) -- the most reproducible measurement in the campaign. Passes were INTERLEAVED, not blocked, so drift over the allocation cannot masquerade as a residency effect.",
       "control": "GPU-aware MPI run with HOST buffers on both ends landed within 0.02% of plain host. Enabling GPU support costs nothing by itself; the entire 5.5% lives in the hardware path between the NIC and the memory it reads. One run eliminated a whole hypothesis family.",
       "eliminated": [
         {
@@ -729,13 +754,7 @@
           "how": "advantage is FLAT at 5.5% from 64 to 1024 pages, a 16x range. A scatter-gather cost would grow with page count. Nine independent points say it does not."
         }
       ],
-      "open": "Contention versus cache coherence on host DMA. The discriminating test was confounded -- see cost.contention_sensitivity.",
       "working_account": "A per-message CPU-side cost in the device path -- plausibly a fence or flush making GPU writes visible to the NIC -- explains the small-message penalty and the crossover. The residual steady-state 5.5% is not explained by amortisation alone; coherence on host DMA is the leading candidate.",
-      "evidence": [
-        "results-frontier/internode_hd_bw.txt",
-        "results-frontier/internode_repeat.txt",
-        "results-frontier/hugepage_internode.txt"
-      ],
       "practical": "Bandwidth turns positive at 16 KB, latency not until 256 KB -- a streaming benchmark keeps messages in flight and amortises the fixed cost, a ping-pong pays it every round trip. Production GPU HPC and LLM training move megabytes and sit far above both crossovers. The small-message penalty applies to halo exchanges and small collectives.",
       "measured_under": {
         "pattern": "ping-pong (osu_latency) and streaming (osu_bw) reported separately -- the crossover differs between them, which is why both are recorded",
@@ -749,7 +768,14 @@
         "Under network load from other users, and the fabric is shared.",
         "Whether the crossover moves with GCD choice or NUMA placement of the host buffer."
       ],
-      "mechanism": "Device buffers avoid a staging copy but pay a fixed per-transfer setup that host staging does not. Below the crossover the fixed cost dominates and staging wins; above it the avoided copy dominates and device wins. The crossover therefore sits wherever those two costs cross, which is why it differs between ping-pong and streaming: a streaming benchmark keeps messages in flight and amortises the fixed cost."
+      "mechanism": "Device buffers avoid a staging copy but pay a fixed per-transfer setup that host staging does not. Below the crossover the fixed cost dominates and staging wins; above it the avoided copy dominates and device wins. The crossover therefore sits wherever those two costs cross, which is why it differs between ping-pong and streaming: a streaming benchmark keeps messages in flight and amortises the fixed cost.",
+      "margin": "The 4 MiB bandwidth gap is 82x the across-pass spread; the latency gap is 30x. Device latency varied 0.02 us across three passes (0.011%) -- the most reproducible measurement in the campaign. Passes were INTERLEAVED, not blocked, so drift over the allocation cannot masquerade as a residency effect.",
+      "evidence": [
+        "results-frontier/internode_hd_bw.txt",
+        "results-frontier/internode_repeat.txt",
+        "results-frontier/hugepage_internode.txt"
+      ],
+      "open": "Contention versus cache coherence on host DMA. The discriminating test was confounded -- see cost.contention_sensitivity."
     },
     {
       "claim": "cost.contention_sensitivity",
@@ -758,15 +784,11 @@
       "confidence": "low",
       "declared": null,
       "measured": {
-        "conditions": {
-          "load": "24 streaming threads on DDR4"
-        },
         "host_MBs": 11287,
         "host_degradation": "-50%",
         "device_MBs": 6090,
         "device_degradation": "-75%"
       },
-      "margin": "The result INVERTS the idle-state gap, which is backwards for memory contention -- device transfers never touch the loaded DDR4.",
       "confounded": true,
       "confound": "The load generator consumes cores as well as bandwidth. The GPU-direct path needs more host CPU, so core starvation swamped the effect under test. Recorded as confounded rather than reported as a number.",
       "unplanned_finding": {
@@ -775,19 +797,20 @@
         "note": "Nobody set out to measure this. It matters, because a real application is using its cores. It survives the confound because the confound IS the finding here."
       },
       "next_step": "Separate core pressure from bandwidth pressure -- pin the load generator off the ranks under test, or drive memory load from a different domain.",
+      "measured_under": {
+        "load": "24 streaming threads on DDR4",
+        "status": "CONFOUNDED -- probe_validated is no, confidence low. These conditions describe an attempt, not a measurement.",
+        "load_generator": "shared the cores under test rather than being pinned off them; that is the confound"
+      },
+      "not_measured": [
+        "Everything. This claim has no usable value in any regime. It is retained because a characterization on an idle node describes a machine nobody runs on, and recording the failed attempt is more honest than an empty slot."
+      ],
+      "margin": "The result INVERTS the idle-state gap, which is backwards for memory contention -- device transfers never touch the loaded DDR4.",
       "evidence": [
         "results-frontier/contention.txt",
         "results-frontier/contention2.txt",
         "results-frontier/ct_dd_load_p1..p2.txt",
         "results-frontier/ct_hh_load_p1..p2.txt"
-      ],
-      "measured_under": {
-        "status": "CONFOUNDED -- probe_validated is no, confidence low. These conditions describe an attempt, not a measurement.",
-        "load_generator": "shared the cores under test rather than being pinned off them; that is the confound",
-        "traffic": "NOT RECORDED at measurement time -- recovered from evidence files if at all"
-      },
-      "not_measured": [
-        "Everything. This claim has no usable value in any regime. It is retained because a characterization on an idle node describes a machine nobody runs on, and recording the failed attempt is more honest than an empty slot."
       ]
     },
     {
@@ -876,6 +899,34 @@
       "remedy": "Use the boost/1.86.0 module and build only gpu_real -- about 15 minutes.",
       "provenance": "measured",
       "provenance_note": "We hit this building QMCPACK. Not in any OLCF document."
+    },
+    {
+      "id": "prgenv-cray-drops-openmp",
+      "symptom": "A CMake project builds cleanly under the default environment and runs single-threaded. The timer table looks normal; nothing errors.",
+      "cause": "Frontier defaults to PrgEnv-cray. CCE identifies to CMake as \"CrayClang\", which matches a \"Cray\" branch BEFORE any \"Clang\" branch in projects that test in that order. If the project ships no CrayCompilers.cmake, it falls through to a warning and sets no flags at all -- including -fopenmp. Configuration.h then substitutes stub omp_* functions, so every `omp parallel for` and `omp simd` is silently dropped.",
+      "remedy": "module load PrgEnv-gnu, and verify: grep ENABLE_OPENMP build/src/config.h must show 1. Do not trust a clean build.",
+      "sting": "Observed on miniQMC 2026-08-13. The failure costs a factor of the thread count and presents as \"this machine is slow\", not as a build problem."
+    },
+    {
+      "id": "mpi-off-by-default",
+      "symptom": "`srun -n16` completes, prints one timer table, and reports a plausible time. Scaling studies show no speedup and no error.",
+      "cause": "Some CMake projects default MPI OFF (miniQMC: SET(QMC_MPI 0 ...)). Without it the binary is serial, so N ranks are N independent copies of the whole problem rather than one N-rank job. Nothing in the output says so unless the code happens to print MPI rank count.",
+      "remedy": "Pass the project's MPI flag explicitly and verify HAVE_MPI in the generated config header. Prefer a benchmark that prints its rank count, and check it.",
+      "sting": "Detected only because miniQMC prints \"MPI processes = N\". A code that does not print it would have produced a full scaling study of nonsense."
+    },
+    {
+      "id": "cmake-needs-cray-system-name",
+      "symptom": "CMake configure fails on a Cray system with FindMPI unable to accept the CC wrapper as an MPI compiler.",
+      "cause": "CMAKE_SYSTEM_NAME must be CrayLinuxEnvironment for FindMPI to recognise the Cray compiler wrappers.",
+      "remedy": "-DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment. Note this also implies cross-compiling, which skips MPI_DETERMINE_LIBRARY_VERSION -- projects that test the resulting variable then abort, and need it defined manually.",
+      "sting": "Two failures from one cause, the second appearing only after the first is fixed."
+    },
+    {
+      "id": "tmp-is-ram-not-disk",
+      "symptom": "`df -h /tmp` on a compute node reports ~252 G available, so it reads as a generous node-local scratch disk. A job that writes tens or hundreds of GB there dies out of memory, and the failure points at the application rather than at the write.",
+      "cause": "/tmp, /dev/shm and /rootfs.rw are all tmpfs on Frontier compute nodes -- they are RAM. Every byte written counts against the node memory the job is using. The 252 G figure is a tmpfs size limit, not free storage. /var/tmp and /mnt/bb are overlay, and /mnt/bb is NOT writable by default despite every node advertising the `nvme` Slurm feature, so the NVMe appears to have to be requested explicitly rather than being mounted for free.",
+      "remedy": "Write bulk output to $MEMBERWORK or $PROJWORK (Lustre). Use /tmp only for small, transient files and count what you put there against your memory budget. To use node-local NVMe, request it -- verify the mechanism before relying on it; /mnt/bb/$USER did not exist in a default allocation.",
+      "sting": "Observed on frontier06028, 2026-08-18. $HOME is NFS and not Lustre either (lfs exits 25 there), so neither of the two paths a user reaches for by habit is the right one for bulk I/O."
     }
   ],
   "open_questions": [
