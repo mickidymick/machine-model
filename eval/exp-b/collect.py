@@ -103,7 +103,13 @@ def welch(xs, ys):
 
 # ------------------------------------------------------------------- loading
 def load(path):
-    rows = list(csv.DictReader(open(path)))
+    try:
+        rows = list(csv.DictReader(open(path)))
+    except FileNotFoundError:
+        sys.exit(f"no such CSV: {path}\n"
+                 "  Runs write results/<bench>_<stamp>.csv; rebuilds write\n"
+                 "  results/rebuilt/<bench>_<stamp>.csv. Name the stamp explicitly --\n"
+                 "  `ls -t` once picked a stale rebuild over a queued run's output.")
     if not rows:
         sys.exit("no rows in " + path)
 
@@ -220,8 +226,14 @@ def main(path, svg_out=None):
     # rebuilt CSV because `ls -t` matched it, and nothing in the output said
     # which file had been read, so the numbers looked like a fresh result.
     import os, time
-    mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(path)))
-    print(f"source: {path}   (written {mtime})")
+    try:
+        mtime = time.strftime('%Y-%m-%d %H:%M',
+                              time.localtime(os.path.getmtime(path)))
+        print(f"source: {path}   (written {mtime})")
+    except OSError as e:
+        # A provenance line must never be the thing that kills the tool, and a
+        # missing file deserves load()'s message rather than a stat traceback.
+        print(f"source: {path}   (stat failed: {e.strerror})")
     by, meta = load(path)
     work_ok = check_equal_work(by, meta)
     report_manipulation(by, meta)
