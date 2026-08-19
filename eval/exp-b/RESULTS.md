@@ -383,3 +383,75 @@ specialization** -- not the Frontier default and not what either arm reasoned
 about. One configuration draw per arm; agent output is stochastic and a second
 draw might weigh the source differently. The decomposition explains OUR arms'
 difference, not what either arm would have done with different information.
+
+---
+
+# ROUND 3b — 2026-08-19, job 5309635. One paragraph recovers 44% of the gap.
+
+Three configs, 5 interleaved passes, one allocation, equal work at 729,000
+elements. The only difference between the two artifact arms is a single
+paragraph at the top of the briefing telling the reader the document cannot see
+its application.
+
+| config | mean s | sd | gap to control |
+|---|---|---|---|
+| no-artifact | **5.43** | 0.005 | — |
+| with-artifact **+ scope paragraph** | **8.50** | 0.014 | +3.07 |
+| with-artifact | **10.95** | 0.018 | +5.52 |
+
+**The scoped arm is 1.29x faster than the unscoped one** (p = 6.3e-16), closing
+**2.45 s of a 5.52 s deficit -- 44% of the gap.** It remains 1.57x slower than
+the control (p = 8.9e-13).
+
+## The pre-registered outcomes did not include what happened
+
+Three were registered: finds the force path, does not, or finds it and still
+loses. The actual outcome is a fourth: **attention moved to the right place and
+the diagnosis stopped one level short.**
+
+The scoped arm opens with *"The decisive fact is in the source, not the machine
+sheet"* -- a direct response to the paragraph. It went to `lulesh.cc:515,738`,
+the same functions the control used. It found the nine `8*numElem` temporaries
+allocated per cycle and read them as an ALLOCATOR problem, fixing it with
+`MALLOC_MMAP_THRESHOLD_`/`MALLOC_TRIM_THRESHOLD_` at 1 GB.
+
+The control read the same lines and saw that those temporaries exist ONLY when
+`numthreads > 1`, and represent a different, costlier force-summation algorithm.
+One arm treated a symptom worth 2.45 s; the other removed the cause worth 5.52 s.
+
+## What this establishes
+
+**Framing is worth a great deal and is not sufficient.** A single paragraph, at
+the top, costing nothing to add and nothing to maintain, recovered nearly half a
+2x deficit. That is a large return for a document-level change and it
+generalises to any machine descriptor.
+
+It did not close the gap, and the residual is the same fact as before. So the
+attention hypothesis survives in a refined form: **telling a reader to look at
+the source successfully redirects where it looks, but does not supply the
+depth of analysis the control reached unprompted.** The control was not merely
+looking in a different place; it was reading more carefully, and a paragraph
+cannot confer that.
+
+## What follows
+
+The next lever is not more prose. Two candidates, in order of my confidence:
+
+1. **Task-scoped renders.** Give a reader only the claims bearing on the
+   decision at hand rather than 713 lines. If the cost is the reading itself --
+   and 44% recovered by re-pointing attention suggests attention really is the
+   binding constraint -- then reducing what must be read should help more than
+   further framing. Already on the build list for other reasons.
+2. **Accept the bound and report it.** A machine descriptor may simply not be
+   the right instrument for codes whose dominant lever is algorithmic, and
+   saying so with this measurement behind it is a stronger contribution than a
+   tuned win would have been.
+
+## Attribution caveat
+
+The two artifact arms differ in the two `MALLOC_*` variables and
+`OMP_DYNAMIC=false`; build flags are equivalent and the geometry is identical
+(8 ranks x 7 threads, SMT off, no huge pages). The arm's own reasoning credits
+the allocator change, but a one-knob run -- unscoped arm plus the two MALLOC
+variables and nothing else -- would settle whether the 2.45 s is entirely that.
+Not yet done.
