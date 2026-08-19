@@ -302,3 +302,84 @@ so each arm could have the flags it asked for. That means **no core
 specialization**, which is not the Frontier default and is not the environment
 either arm reasoned about. Applied equally, so not an arm-vs-arm confound, but
 it is not the production configuration.
+
+---
+
+# ROUND 3 DECOMPOSITION — 2026-08-19, job 5309007. Attribution complete.
+
+Four configs, 5 interleaved passes each, one allocation, equal work verified at
+729,000 elements throughout.
+
+| config | mean s | HW threads | model | SMT |
+|---|---|---|---|---|
+| no-artifact | **5.47** ± 0.015 | 125 | flat MPI | on |
+| with-artifact | **10.98** ± 0.053 | 56 | hybrid | off |
+| wa-smt-on | 11.60 ± 0.043 | 112 | hybrid | on |
+| wa-flat27 | 27.40 ± 0.044 | 27 | flat MPI | off |
+
+## 1. The artifact's SMT claim was correct, and correctly applied
+
+`wa-smt-on` vs `with-artifact` -- same 8 ranks, SMT the only difference.
+**SMT made it 5.6% SLOWER** (p = 6.0e-08).
+
+`cpu.smt_benefit`, measured the same morning, says the bandwidth-saturated
+regime loses **5.0%**. Measured here on a different code: **5.6%**. The
+treatment arm classified LULESH into that regime and turned SMT off, and it was
+right to.
+
+**The claim-quality hypothesis is eliminated.** The artifact was not wrong and
+was not misapplied.
+
+## 2. The OpenMP force path owns the entire gap
+
+`wa-smt-on` (112 threads, hybrid) vs `no-artifact` (125 threads, flat) --
+near-equal parallelism, differing only in parallel model.
+**Hybrid is 2.12x slower** (p = 9.2e-12).
+
+That is the whole 2x. It is the force-summation path the control found in the
+source: ~768 extra bytes per element per cycle, ~35% more DRAM traffic.
+
+Corroborated by the hybrid path's insensitivity to thread count: 10.98 s at 56
+threads, 11.60 s at 112. Doubling parallelism changes nothing because the extra
+traffic has saturated the memory system. On the cheap path, by contrast, 27 ->
+125 threads gives 5.01x for 4.6x the threads -- near-linear, no saturation, so
+the node had more to give and the treatment arm's 56 threads left it unused.
+
+## 3. What this establishes
+
+Every artifact fact the treatment arm used was **correct**. Every application of
+those facts was **correct** -- including one validated to within 0.6 percentage
+points in this very run. And the arm still lost by 2x, because the dominant
+lever was an application property it saw and did not weigh.
+
+**The attention hypothesis is supported and the alternative is eliminated.**
+
+Not "the artifact gives bad advice." Not "the artifact's numbers are stale or
+unconditioned." The finding is narrower and more interesting:
+
+> **Supplying a rich machine description changes where a model spends its
+> reasoning, and reasoning is finite. The treatment arm produced four correct
+> machine-level decisions and missed the one source-level fact that mattered
+> more than all of them combined.**
+
+The irony is worth keeping: `cpu.smt_benefit` was validated to 0.6 percentage
+points in the same run where the artifact carrying it lost by 102%.
+
+## 4. What follows for the design
+
+The fix is not better facts -- the facts are good. It is that the document must
+declare its own scope at the DOCUMENT level, not only per claim. Something to
+the effect of: *this describes the machine; the largest lever for your code may
+be in your source, and nothing here can see it.*
+
+That is an odd thing for an artifact to say about itself, and on this evidence
+it is correct. It is also testable: the same LULESH arms, rerun with that
+paragraph added, either find the force path or do not.
+
+## 5. Bounds
+
+One benchmark. One node, and under `-S 0 --threads-per-core=2`, so **no core
+specialization** -- not the Frontier default and not what either arm reasoned
+about. One configuration draw per arm; agent output is stochastic and a second
+draw might weigh the source differently. The decomposition explains OUR arms'
+difference, not what either arm would have done with different information.
