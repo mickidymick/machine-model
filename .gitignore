@@ -12,9 +12,11 @@ __pycache__/
 # eval/exp-b/setup_bench.sh, never committed. Vendoring it created nested .git
 # directories git cannot track and would put ~100 MB of third-party code in a
 # repo whose content is the harness.
-eval/exp-b/pristine-miniqmc/
+eval/exp-b/pristine-*/
 eval/exp-b/pristine/
 eval/exp-b/arms/*/*/src/
 eval/exp-b/arms/*/*/build/
+eval/exp-b/arms-r3/*/*/src/
+eval/exp-b/arms-r3/*/*/build/
 eval/exp-b/results/*.log
 eval/exp-b/arms/*/*/SOLUTION.sh
