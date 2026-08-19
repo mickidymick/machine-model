@@ -50,7 +50,13 @@ case "$BENCH" in
     # Elapsed time, NOT grind time: grind is per-domain (elapsed/cycles/nx^3) so
     # it is not comparable between runs with different rank counts, and the two
     # arms chose 8 and 125 ranks. Both arms flagged this themselves.
-    t=$(awk -F= '/^Elapsed time/{gsub(/[^0-9.]/,"",$2); print $2; exit}' "$LOG")
+    # NOT the "Elapsed time" line: LULESH prints it at 2 significant figures
+    # ("= 5.4"), which flattened five distinct runs to an identical value and
+    # produced sd=0.000 across every pass. The same quantity appears at 8
+    # figures inside the Grind line as "( 5.4105869 overall)". Parse that.
+    t=$(awk 'match($0,/\([ ]*[0-9.]+ overall\)/){
+               s=substr($0,RSTART,RLENGTH); gsub(/[^0-9.]/,"",s); print s; exit}' "$LOG")
+    [ -n "${t:-}" ] || t=$(awk -F= '/^Elapsed time/{gsub(/[^0-9.]/,"",$2); print $2; exit}' "$LOG")
     f=$(awk -F= '/^FOM/{gsub(/[^0-9.eE+-]/,"",$2); print $2; exit}' "$LOG")
     # work = ranks * problem_size^3, which must be identical across arms even
     # though the factorisation differs (8x45^3 == 125x18^3 == 729000).

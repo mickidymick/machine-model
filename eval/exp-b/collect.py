@@ -296,7 +296,17 @@ def main(path, svg_out=None):
         print(f"  {b} {stats[b]['mean']:.2f} +/- {stats[b]['sd']:.3f}  (n={stats[b]['n']})")
         print(f"  difference: {gap:+.2f}s ({pct:+.1f}%)")
         if p is None:
-            print("  Too few runs for a t-test. Need n>=2 per arm; ZeroSum used 10.")
+            # welch() also returns None when BOTH groups have zero variance,
+            # which is not a sample-size problem and pointing at n sends the
+            # reader to the wrong place. It happened when a parser read a
+            # 2-significant-figure field and flattened every pass to one value.
+            if stats[a]['sd'] == 0 and stats[b]['sd'] == 0:
+                print("  ZERO VARIANCE in both arms -- every pass reported an identical")
+                print("  value. On a shared machine that is a parsing artefact, not a")
+                print("  measurement. Check what field the parser is reading before")
+                print("  believing the difference.")
+            else:
+                print("  Too few runs for a t-test. Need n>=2 per arm; ZeroSum used 10.")
         else:
             print(f"  Welch t={t:.3f}, dof={dof:.1f}, p={p:.4g}")
             if p < 0.05:
