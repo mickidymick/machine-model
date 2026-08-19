@@ -38,6 +38,8 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
              # identically in every tree before any build() runs.
              "$D/fix_header.sh" "$tree/src/src" > /dev/null ;;
     miniqmc) cp -r "$D/pristine-miniqmc" "$tree/src" ;;
+    xsbench) cp -r "$D/pristine-xsbench" "$tree/src" ;;
+    lulesh)  cp -r "$D/pristine-lulesh"  "$tree/src" ;;
     *)       echo "    unknown BENCH=$BENCH"; continue ;;
   esac
 
@@ -107,11 +109,23 @@ for cfg in "$D/configs/$BENCH"/*.sh; do
   case "$BENCH" in
     amg)     bin="$D/arms/$name/$BENCH/src/src/test/amg" ;;
     miniqmc) bin="$D/arms/$name/$BENCH/build/bin/miniqmc" ;;
+    # XSBench builds in-tree; LULESH's location depends on which build system
+    # the arm chose, so both fall through to the search below if absent.
+    xsbench) bin="$D/arms/$name/$BENCH/src/openmp-threading/XSBench" ;;
+    lulesh)  bin="$D/arms/$name/$BENCH/build/lulesh2.0" ;;
   esac
   # An arm may build somewhere else entirely; fall back to a search rather than
   # reporting NO BINARY for a build that actually succeeded.
   if [ ! -x "$bin" ]; then
-    alt=$(find "$D/arms/$name/$BENCH" -type f -perm -u+x -name "$BENCH" 2>/dev/null | head -1)
+    # -name "$BENCH" alone misses XSBench (capitalised) and lulesh2.0
+    # (versioned), and an arm may build somewhere unexpected. Search the known
+    # executable names for this benchmark, newest first.
+    case "$BENCH" in
+      xsbench) pat='XSBench' ;;
+      lulesh)  pat='lulesh2.0' ;;
+      *)       pat="$BENCH" ;;
+    esac
+    alt=$(find "$D/arms/$name/$BENCH" -type f -perm -u+x -name "$pat" 2>/dev/null | head -1)
     [ -n "$alt" ] && bin="$alt"
   fi
   if [ ! -x "$bin" ]; then

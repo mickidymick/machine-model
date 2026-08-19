@@ -35,6 +35,32 @@ case "$BENCH" in
     f=$(awk '/Figure of Merit \(FOM_2\)/{print $NF; exit}' "$LOG")
     work=NA   # AMG does not self-report its global grid
     ;;
+  xsbench)
+    # Runtime is the reported figure; Lookups is the work. The verification
+    # checksum is the equal-work anchor -- identical inputs must produce an
+    # identical checksum, so a differing one means the arms did different work
+    # no matter what the lookup count says.
+    t=$(awk -F: '/^Runtime:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' "$LOG")
+    f=$(awk -F: '/^Lookups\/s:/{gsub(/[^0-9]/,"",$2); print $2; exit}' "$LOG")
+    work=$(awk -F: '/Verification checksum/{gsub(/[^0-9]/,"",$2); print $2; exit}' "$LOG")
+    r=$(awk -F: '/^Threads:/{gsub(/[^0-9]/,"",$2); print $2; exit}' "$LOG")
+    th=$r
+    ;;
+  lulesh)
+    # Elapsed time, NOT grind time: grind is per-domain (elapsed/cycles/nx^3) so
+    # it is not comparable between runs with different rank counts, and the two
+    # arms chose 8 and 125 ranks. Both arms flagged this themselves.
+    t=$(awk -F= '/^Elapsed time/{gsub(/[^0-9.]/,"",$2); print $2; exit}' "$LOG")
+    f=$(awk -F= '/^FOM/{gsub(/[^0-9.eE+-]/,"",$2); print $2; exit}' "$LOG")
+    # work = ranks * problem_size^3, which must be identical across arms even
+    # though the factorisation differs (8x45^3 == 125x18^3 == 729000).
+    local_ranks=$(awk -F= '/MPI tasks/{gsub(/[^0-9]/,"",$2); print $2; exit}' "$LOG")
+    local_nx=$(awk -F= '/Problem size/{gsub(/[^0-9]/,"",$2); print $2; exit}' "$LOG")
+    if [ -n "${local_ranks:-}" ] && [ -n "${local_nx:-}" ]; then
+      work=$(( local_ranks * local_nx * local_nx * local_nx ))
+      r=$local_ranks
+    else work=NA; fi
+    ;;
   *) t=""; f=""; work=NA ;;
 esac
 echo "${t:-NA},${f:-NA},${work:-NA},${r:-NA},${th:-NA}"
