@@ -1,89 +1,80 @@
-# Pick up here — 2026-08-19
+# Pick up here — after 2026-08-19
 
-Written at the end of 2026-08-18. Everything below is committed and pushed on
-both `machine-model` and `frontier`.
-
----
-
-## 1. RUN THESE FIRST — all built, tested, independent
-
-```bash
-cd ~/Projects/frontier && git pull
-sbatch -A CSC617 slurm/smt.sbatch          # 1 node,  25 min
-sbatch -A CSC617 slurm/collectives.sbatch  # 16 nodes, 35 min
-sbatch -A CSC617 slurm/storage.sbatch      # 4 nodes,  50 min (-C nvme in header)
-~/Projects/machine-model/tools/jobs.sh -w
-```
-
-Then analyse:
-```bash
-python3 - <<'ANALYSE'
-ANALYSE
-# smt + storage print their own analysis at the end of the job output.
-python3 scripts/18_fabric_report.py results-frontier/fabric_*/pairs.csv   # if rerun
-```
-
-**What each asks, and what would falsify it**
-
-| job | question | falsifier |
-|---|---|---|
-| smt | does a 2nd hardware thread per core help? | all three kernels agree → the regime framing was wrong |
-| collectives | does cost scale the same in size and in rank count? | same shape both ways → one number would have sufficed |
-| storage | does bandwidth step at the declared 256 KiB and 8 MiB boundaries? | no step → the layout is declared but not observable, a `confirmed` verdict |
-
-Storage also compares node-local NVMe against Lustre, and default layout against
-`lfs setstripe -c 8` at 1 GiB.
+Everything below is committed and pushed on `machine-model` and `frontier`.
 
 ---
 
-## 2. FOLD RESULTS INTO THE ARTIFACT
+## THE RESULT SO FAR
 
-Each job produces a claim. They are NOT yet in `registry/claims.json`:
-`cpu.smt_benefit`, `cost.collective_scaling`, `cost.storage_bands`,
-`cost.queue_wait`, `net.fabric_locality`, `cost.fabric_distance`.
+Round 3 established the project's central finding. **Every artifact fact the
+treatment arm used was correct, every application was correct, and it still lost
+2x** — because the dominant lever was a source-level property it saw and did not
+weigh. A document-level scope paragraph recovered **44%** of that gap.
 
-`storage.tier_inventory` IS in (registry 0.4) and answered.
+    no-artifact                    5.43 s
+    with-artifact + scope para     8.50 s   <- one paragraph, p=6.3e-16
+    with-artifact                 10.95 s
 
-Every new claim must be born with `measured_under`, `not_measured`,
-`mechanism`, and `regime_variables` as a LIST. `check.py` flags any claim
-carrying a physical quantity without conditions.
-
----
-
-## 3. OUTSTANDING, ROUGHLY BY VALUE
-
-- **Re-run Experiment B with the regime-aware briefing.** Same benchmark
-  (miniQMC), same everything, only the artifact's form changed. Prediction to
-  pre-register: the treatment arm DECLINES huge pages, because the briefing now
-  says "NOT measured: streaming" before it shows the 2.4x. This is the direct
-  test of the fix, on the exact case that broke.
-- **Node-to-node variability.** Still the biggest credibility gap; every number
-  in the artifact is one node. 8-16 short jobs.
-- **Fabric follow-ups.** Two pairs measured 3.47 us against a 3.68 mode —
-  identify them (`awk -F, 'NR>1 && $9<3.55 {print $4,$5,$6,$7,$9}'`). Then
-  repeat runs for coverage, one at low occupancy, one `--switches=1` for the
-  near baseline.
-- **XSBench**, pre-registered as the regime test. Random binary search is the
-  access pattern the 2.4x was actually measured under.
-- **corsys4 conditions retrofit** — `check.py` flags 6 claims there.
-- **Registry pin.** Frontier answered against 0.1, registry is now 0.4. Diff
-  what changed across those revisions before bumping; bumping without re-reading
-  would launder a stale pin.
-- **HSA_XNACK** — the one knob gap not built. Needs new HIP code.
-- **Effect sizes / knob sensitivity** — Jeff deferred this deliberately. The
-  idea: measure the best-to-worst spread of each knob so the artifact can say
-  where a reader should spend attention, not only what a number is. Two rows
-  already exist (huge pages -2.7%..+2.4x; NIC policy 0.13%).
+Full write-up: `eval/exp-b/RESULTS.md`. Memory: `machine-model-attention-finding`.
 
 ---
 
-## 4. THINGS THAT WILL BITE AGAIN
+## 1. LOOSE ENDS ON THE FINDING (do before it goes in a paper)
 
-- **Always pass `-o` to sbatch.** A `--wrap` job's default output could not be
-  found afterwards. Every committed script sets it.
-- **`$HOME` is NFS, `/tmp` is RAM.** Never benchmark I/O in either.
-- **Check `build_all.sh`'s hash table** before submitting a timed job — it exits
-  1 if any binary is missing, but read the hashes too.
-- Probes that report impossible numbers have appeared three times now (14 PB/s,
-  5.9x from a missing fsync, a 64x false positive on flat data). Sanity-check
-  every new probe against a physical ceiling before trusting it.
+- **One-knob confirmation.** The two artifact arms differ in the two `MALLOC_*`
+  variables AND `OMP_DYNAMIC=false`. Run the unscoped arm plus the MALLOC vars
+  only, to confirm the 2.45 s is the allocator change. One node, minutes.
+- **XSBench comparison is MISSING.** Its no-artifact arm failed to build:
+  `craype-hugepages2M` injects `-Wl,-Ttext-segment`, which `PrgEnv-amd`'s lld
+  rejects. Recorded as a pitfall. Pre-registration says report it as an arm
+  failure rather than re-roll — but that loses the half of round 3 that tested
+  correct POSITIVE use of the page-size number. Decide: report as-is, or add a
+  disclosed "iterations to a working configuration" metric.
+- **Second draw per arm.** Agent output is stochastic and every result so far
+  rests on one draw per arm. Three would separate the artifact's effect from the
+  luck of a single generation. Cheap — no allocation, just sessions.
+
+## 2. THE NEXT LEVER
+
+**Task-scoped renders.** If 44% comes from re-pointing attention inside 713
+lines, reducing what must be read should beat further framing. `render.py
+--for placement` was already on the build list. This is now the highest-value
+artifact change.
+
+The alternative, if that fails: accept the bound and report it. A machine
+descriptor may not be the right instrument for codes whose dominant lever is
+algorithmic, and saying so with this measurement behind it beats a tuned win.
+
+## 3. ARTIFACT STATE
+
+Registry **0.6**, 20 claims. Frontier: 4 confirmed / 3 misleading / 3
+contradicted / 6 undeclared / 1 unfalsifiable / 1 untested, 11 pitfalls.
+Every measured QUANTITY carries `measured_under` / `not_measured` / `mechanism`,
+rendered BEFORE the value. `check.py` flags any that do not.
+
+Added 2026-08-18/19: `storage.tier_inventory`, `cost.collective_scaling`,
+`cpu.smt_benefit`, `cost.storage_bands`.
+
+**Outstanding:** corsys4 not retrofitted with conditions (6 flagged). Registry
+pin still 0.1 against 0.6 — diff what changed before bumping. `cpu.system_interference`
+and HSA_XNACK still unbuilt. Fabric follow-ups (the two 3.47us outliers, a
+low-occupancy run, `--switches=1`).
+
+## 4. THINGS THAT BIT, REPEATEDLY
+
+Every measurement failure this week was **a plausible number, not an error**,
+and every one was caught by a physics or arithmetic expectation rather than by
+the code looking wrong:
+
+- SMT probe reported 14 PB/s (loops optimised out)
+- missing `fsync` overstated storage 5.9x
+- `/dev/zero` on NVMe reported 311 GB/s (device elides zero blocks)
+- LULESH's `Elapsed time` prints 2 significant figures — five distinct runs
+  flattened to sd=0.000
+- a stale `.rebuilt.csv` won an `ls -t` glob and produced a well-formed,
+  entirely wrong analysis
+
+Harness rules that follow: sanity-floor every probe against a physical ceiling;
+always pass `-o` to sbatch; verify directives by anchored grep, not bare string
+match (a comment matched once and hid a missing `#SBATCH` line); check
+arithmetic before submitting (64 was an illegal LULESH rank count).
