@@ -913,6 +913,89 @@
         "results-frontier/stor_5303397.out",
         "~/nvme_test.out (job 5303420)"
       ]
+    },
+    {
+      "claim": "cost.collective_scaling",
+      "verdict": "undeclared",
+      "probe_validated": "yes",
+      "confidence": "high",
+      "declared": null,
+      "measured_under": {
+        "job": "5307447, 2026-08-19",
+        "nodes": "1 to 16, ranks 8 to 128",
+        "ranks_per_node": "8, FIXED -- more ranks means more nodes, not different packing",
+        "binding": "-c 7 --threads-per-core=1 --cpu-bind=cores",
+        "passes": 2,
+        "buffers": "host memory",
+        "fabric_state": "SHARED with all other users; occupancy recorded in the run conditions file. This claim varies with what other jobs are doing in a way that memory-side claims do not."
+      },
+      "measured": {
+        "unit": "us, median of passes",
+        "regime_variables": [
+          "message size",
+          "rank count",
+          "operation"
+        ],
+        "rank_scaling_8_to_128_ranks": [
+          {
+            "op": "allreduce",
+            "bytes": 8,
+            "us_at_8_ranks": 2.63,
+            "us_at_128_ranks": 20.86,
+            "growth": "7.9x"
+          },
+          {
+            "op": "allreduce",
+            "bytes": 1048576,
+            "us_at_8_ranks": 760.5,
+            "us_at_128_ranks": 1200.59,
+            "growth": "1.6x"
+          },
+          {
+            "op": "alltoall",
+            "bytes": 8,
+            "us_at_8_ranks": 5.28,
+            "us_at_128_ranks": 55.55,
+            "growth": "10.5x"
+          },
+          {
+            "op": "alltoall",
+            "bytes": 65536,
+            "us_at_8_ranks": 45.07,
+            "us_at_128_ranks": 1186.14,
+            "growth": "26.3x"
+          },
+          {
+            "op": "bcast",
+            "bytes": 8,
+            "us_at_8_ranks": 0.43,
+            "us_at_128_ranks": 6.38,
+            "growth": "14.8x"
+          },
+          {
+            "op": "bcast",
+            "bytes": 1048576,
+            "us_at_8_ranks": 37.35,
+            "us_at_128_ranks": 395.31,
+            "growth": "10.6x"
+          }
+        ]
+      },
+      "not_measured": [
+        "Beyond 128 ranks / 16 nodes. Alltoall is already superlinear at 128 and the extrapolation is the interesting part, so this bound matters.",
+        "Ranks-per-node other than 8 -- on-node packing was deliberately held fixed, so nothing here separates rank scaling from per-node contention.",
+        "GPU-resident buffers.",
+        "Non-power-of-two rank counts, where Cray MPICH may select a different algorithm.",
+        "Under network load from the job itself, as opposed to from other users."
+      ],
+      "mechanism": "Small-message collectives are bound by hop count and per-message overhead, so cost grows roughly with the depth of the reduction or broadcast tree -- logarithmic-ish in rank count. Large-message allreduce is bandwidth bound and each rank moves a nearly fixed volume regardless of how many peers exist, so it barely grows. Alltoall is different in kind: total messages grow as n^2, so per-rank time grows WITH the rank count and the growth is superlinear once messages are large enough to be bandwidth bound.",
+      "margin": "Growth from 8 to 128 ranks spans 1.6x to 26.3x depending on operation and message size -- a factor of 16 difference in the scaling exponent itself.",
+      "consequence": "A scaling study extrapolated from point-to-point numbers, or from one message size, predicts the wrong rank count to stop at. A code dominated by small allreduces and one dominated by large alltoall have opposite scaling behaviour on the same fabric.",
+      "note": "THE FINDING IS THE DISAGREEMENT. The two regime axes do not have the same shape: allreduce at 1 MiB grows 1.6x over the same rank range where alltoall at 64 KiB grows 26.3x. So no scalar and no single curve describes collective cost here -- it is a surface, and any summary that collapses either axis is wrong somewhere. This was pre-registered as the falsifiable question and could have come out the other way: matching shapes would have meant one curve sufficed.",
+      "evidence": [
+        "results-frontier/coll_5307447_*/collectives.csv",
+        "results-frontier/coll_5307447_*/conditions.txt"
+      ]
     }
   ],
   "flagged": [

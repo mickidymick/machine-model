@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.4",
+  "registry_version": "0.5",
   "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
   "verdicts": {
     "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
@@ -488,6 +488,26 @@
       "verdict_rule": "misleading if df in a default allocation reports a tier that is not what it appears to be, or omits a tier the job could have had. contradicted if a documented tier is absent. confirmed if df alone yields the correct picture.",
       "consequence_if_wrong": "Bulk output written to RAM, exhausting node memory with the failure appearing to be in the application; or local disk left unused while every rank writes across the network.",
       "portability": "Universal. Every machine has a storage hierarchy and df describes it incompletely on most of them."
+    },
+    {
+      "id": "cost.collective_scaling",
+      "domain": "cost",
+      "declares": "What a collective costs, as a function of BOTH message size and rank count.",
+      "declared_source": null,
+      "why_it_matters": "Real applications live on allreduce and alltoall, not on ping-pong. Point-to-point numbers cannot predict where a code stops scaling, because the rank-scaling exponent is not the same for every operation or every message size. MPI library documentation describes algorithms but not their cost on a specific fabric, so there is no declared source to check against.",
+      "probe": {
+        "id": "collective-scaling",
+        "tool": "OSU osu_allreduce / osu_alltoall / osu_bcast, swept over message size and rank count",
+        "rationale": "Rank count is swept at FIXED ranks-per-node so that more ranks means more nodes rather than different on-node packing -- mixing them confounds rank scaling with per-node contention.",
+        "conditions": {
+          "ranks_per_node": "fixed",
+          "passes": ">= 2, interleaved",
+          "note": "the fabric is shared; record machine occupancy"
+        }
+      },
+      "verdict_rule": "undeclared -- nothing publishes this. The finding is whether the size and rank axes have the SAME shape: if they do, one curve suffices; if not, the cost is a surface and any scalar or single curve is wrong somewhere.",
+      "consequence_if_wrong": "A scaling study extrapolated from point-to-point or from one message size predicts the wrong rank count to stop at.",
+      "portability": "Universal."
     }
   ]
 }
