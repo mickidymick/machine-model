@@ -245,6 +245,62 @@ Read this section before acting on any topology query you run yourself, or on an
 
 **What goes wrong if you trust the declared value**: A job writing bulk per-rank output to /tmp consumes node memory and dies out of memory, with the failure appearing to be in the application. A job that could have staged 3.4 TB locally instead writes it to a single Lustre stripe.
 
+### Write bandwidth as a function of file size and storage tier, and whether the declared layout boundaries are observable
+
+`cost.storage_bands` — **misleading** (confidence: medium)
+
+**Declared** (lfs getstripe -d $MEMBERWORK -- 7-component Progressive File Layout):
+- **boundaries**: < 256 KiB: MDT (Data-on-MDT), 256 KiB - 8 MiB: pool `performance`, 1 stripe, 8 MiB - 128 GiB: pool `capacity`, 1 stripe, self-extending, > 128 GiB: pool `capacity`, 8 stripes
+- **implication**: a file changes pool at 8 MiB, so behaviour should change there
+
+**Measured under** — holds under these conditions, not known to hold outside them:
+  - job: 5307805, 2026-08-19, 1 node
+  - writers: 1
+  - source: incompressible (/dev/urandom buffer, reused)
+  - durability: fsync per file
+  - target: $MEMBERWORK project directory on orion
+  - machine state: 9608 nodes running machine-wide -- the filesystem is SHARED
+  - passes: 3
+
+**NOT measured** — no value here, in either direction:
+  - MULTIPLE WRITERS. Every number here is one writer, and that is the case where striping and tier choice are most likely to behave differently. The striping null should NOT be generalised to a parallel write.
+  - The 128 GiB boundary, where the declared layout finally uses 8 stripes.
+  - Reads.
+  - A quiet filesystem. Pass-to-pass spread reached 4x at 1 GiB in an earlier run; orion is shared and this varies with what everyone else is doing.
+
+**Mechanism**: Small-file bandwidth is dominated by fixed per-file cost, which is why the curve climbs monotonically from 128 KiB to 1 GiB regardless of pool. The 256 KiB boundary is visible because Data-on-MDT is a different mechanism, not a faster disk. Node-local NVMe wins at small sizes because it avoids the network and the OST round trip, and LOSES at large sizes because a single device has a fixed write ceiling while Lustre aggregates many OSTs behind a write-back cache.
+
+**Measured**:
+- **unit**: MB/s, median of 3 passes
+- **regime variables**: file size, storage tier, number of writers (NOT swept)
+- **lustre by size**:
+  - bytes 131072, MBps 0.9, declared band MDT
+  - bytes 262144, MBps 7.1, declared band performance, step 8.1x -- the 256 KiB boundary IS observable
+  - bytes 524288, MBps 5.3, declared band performance
+  - bytes 4194304, MBps 108.8, declared band performance
+  - bytes 8388608, MBps 137.1, declared band capacity, step 1.26x -- the 8 MiB boundary is NOT observable; the climb is smooth
+  - bytes 16777216, MBps 130.9, declared band capacity
+  - bytes 67108864, MBps 355.8, declared band capacity
+  - bytes 268435456, MBps 721.1, declared band capacity
+  - bytes 1073741824, MBps 812, declared band capacity
+- **nvme vs lustre**:
+  - bytes 8388608, nvme MBps 536.4, lustre MBps 137.1, ratio 3.91x
+  - bytes 67108864, nvme MBps 755.9, lustre MBps 355.8, ratio 2.12x
+  - bytes 268435456, nvme MBps 475.7, lustre MBps 721.1, ratio 0.66x
+  - bytes 1073741824, nvme MBps 438.4, lustre MBps 812, ratio 0.54x
+- **explicit stripe 8 at 1GiB**:
+  - **default MBps**: 805.7
+  - **stripe8 MBps**: 751.6
+  - **ratio**: 0.93x
+  - **replication**: 0.97x in job 5307700 -- a replicated null
+- **metadata creates per sec**: 1500-1815 (0-byte files, Data-on-MDT band)
+
+**Margin**: The NVMe-vs-Lustre ratio CROSSES OVER between 64 MiB and 256 MiB: 3.91x in favour of local at 8 MiB, 0.54x against it at 1 GiB.
+
+**What goes wrong if you trust the declared value**: A user told "node-local is faster because it is local" is right below ~100 MB and wrong above it, by nearly 2x at 1 GiB -- which is the size range checkpoints occupy. And effort spent setting an explicit stripe count buys nothing for a single writer.
+
+**Note**: SPLIT VERDICT on the declared layout, which is why this is `misleading` rather than confirmed or contradicted. The 256 KiB boundary is observable (8.1x step). The 8 MiB pool change -- the one a user would most want to act on, since it silently moves data from `performance` to `capacity` -- produces NO observable step at single-writer scale. The layout declares a transition that a user cannot detect and therefore cannot act on.
+
 ## What the machine reports accurately
 
 These may be trusted from the system's own interfaces. Listed so a consumer knows which queries are reliable here, not only which are not.
@@ -434,6 +490,77 @@ Whether device-resident buffers beat host-staged ones changes sign with message 
 **Practical reading**: Bandwidth turns positive at 16 KB, latency not until 256 KB -- a streaming benchmark keeps messages in flight and amortises the fixed cost, a ping-pong pays it every round trip. Production GPU HPC and LLM training move megabytes and sit far above both crossovers. The small-message penalty applies to halo exchanges and small collectives.
 
 **Open**: Contention versus cache coherence on host DMA. The discriminating test was confounded -- see cost.contention_sensitivity.
+
+### cost.collective_scaling
+
+Real applications live on allreduce and alltoall, not on ping-pong. Point-to-point numbers cannot predict where a code stops scaling, because the rank-scaling exponent is not the same for every operation or every message size. MPI library documentation describes algorithms but not their cost on a specific fabric, so there is no declared source to check against.
+
+**Measured under** — holds under these conditions, not known to hold outside them:
+  - job: 5307447, 2026-08-19
+  - nodes: 1 to 16, ranks 8 to 128
+  - ranks per node: 8, FIXED -- more ranks means more nodes, not different packing
+  - binding: -c 7 --threads-per-core=1 --cpu-bind=cores
+  - passes: 2
+  - buffers: host memory
+  - fabric state: SHARED with all other users; occupancy recorded in the run conditions file. This claim varies with what other jobs are doing in a way that memory-side claims do not.
+
+**NOT measured** — no value here, in either direction:
+  - Beyond 128 ranks / 16 nodes. Alltoall is already superlinear at 128 and the extrapolation is the interesting part, so this bound matters.
+  - Ranks-per-node other than 8 -- on-node packing was deliberately held fixed, so nothing here separates rank scaling from per-node contention.
+  - GPU-resident buffers.
+  - Non-power-of-two rank counts, where Cray MPICH may select a different algorithm.
+  - Under network load from the job itself, as opposed to from other users.
+
+**Mechanism**: Small-message collectives are bound by hop count and per-message overhead, so cost grows roughly with the depth of the reduction or broadcast tree -- logarithmic-ish in rank count. Large-message allreduce is bandwidth bound and each rank moves a nearly fixed volume regardless of how many peers exist, so it barely grows. Alltoall is different in kind: total messages grow as n^2, so per-rank time grows WITH the rank count and the growth is superlinear once messages are large enough to be bandwidth bound.
+
+- **unit**: us, median of passes
+- **regime variables**: message size, rank count, operation
+- **rank scaling 8 to 128 ranks**:
+  - op allreduce, bytes 8, us at 8 ranks 2.63, us at 128 ranks 20.86, growth 7.9x
+  - op allreduce, bytes 1048576, us at 8 ranks 760.5, us at 128 ranks 1200.59, growth 1.6x
+  - op alltoall, bytes 8, us at 8 ranks 5.28, us at 128 ranks 55.55, growth 10.5x
+  - op alltoall, bytes 65536, us at 8 ranks 45.07, us at 128 ranks 1186.14, growth 26.3x
+  - op bcast, bytes 8, us at 8 ranks 0.43, us at 128 ranks 6.38, growth 14.8x
+  - op bcast, bytes 1048576, us at 8 ranks 37.35, us at 128 ranks 395.31, growth 10.6x
+
+**Shape**: Growth from 8 to 128 ranks spans 1.6x to 26.3x depending on operation and message size -- a factor of 16 difference in the scaling exponent itself.
+
+**Consequence**: A scaling study extrapolated from point-to-point numbers, or from one message size, predicts the wrong rank count to stop at. A code dominated by small allreduces and one dominated by large alltoall have opposite scaling behaviour on the same fabric.
+
+**Note**: THE FINDING IS THE DISAGREEMENT. The two regime axes do not have the same shape: allreduce at 1 MiB grows 1.6x over the same rank range where alltoall at 64 KiB grows 26.3x. So no scalar and no single curve describes collective cost here -- it is a surface, and any summary that collapses either axis is wrong somewhere. This was pre-registered as the falsifiable question and could have come out the other way: matching shapes would have meant one curve sufficed.
+
+### cpu.smt_benefit
+
+Every user sets --threads-per-core on every job, and no source says what it is worth here. The answer is regime-dependent by nature, so a single number would be wrong for half of all codes.
+
+**Measured under** — holds under these conditions, not known to hold outside them:
+  - job: 5307847, 2026-08-19, frontier08598
+  - cores: all 56 allocatable, held fixed across both arms
+  - arms: 56 threads at 1/core vs 112 threads at 2/core
+  - binding: OMP_PROC_BIND=close; OMP_PLACES=cores (1/core) or threads (2/core)
+  - passes: 3, arms in rotating order
+  - kernels: per-thread working sets of 64 MB (chase, stream) and 64 KB (fma)
+
+**NOT measured** — no value here, in either direction:
+  - A genuinely issue-saturated FPU kernel. The fma kernel was DESIGNED to be one and is not -- see the mechanism. Whether SMT hurts when the issue width is actually saturated remains open, and it is the case where the original prediction might still hold.
+  - Thread counts between 56 and 112, so the shape of the transition is unknown.
+  - Mixed workloads, where different threads are limited by different resources.
+  - Anything at fewer than 56 threads -- and this matters: the corsys4 validation at 2 threads gave stream +88%, the opposite sign to Frontier at 56. Saturation is the mechanism, so a low-thread measurement cannot predict a high-thread one.
+
+**Mechanism**: SMT adds a second instruction stream to a core, so it helps exactly when the core is IDLE waiting -- and not at all when the core is already saturating a shared resource. Both latency-bound kernels gain ~70-78% whether they wait on memory (chase) or on FPU result latency (fma); the bandwidth-saturated kernel loses 5%. The distinction is latency-bound versus throughput-bound, NOT memory versus compute.
+
+- **unit**: fraction of additional work from the second hardware thread
+- **regime variables**: what limits the kernel
+- **by kernel**:
+  - kernel chase, limit memory latency, dependent loads, smt gain +69.7%
+  - kernel fma, limit FPU latency -- 4 dependent chains under-saturate a 2/cycle issue width, smt gain +78.2%
+  - kernel stream, limit memory BANDWIDTH, saturated, smt gain -5.0%
+
+**Shape**: A 75-point spread between kernels on the same node in the same job: +78.2% to -5.0%. Any single answer to "should I use SMT" is wrong for some of these.
+
+**Consequence**: A code told to use 112 threads because "SMT helps" loses 5% if it is bandwidth bound; one told to use 56 because "SMT hurts on HPC codes" leaves ~70% on the table if it is latency bound.
+
+**Note**: THE PREDICTION WAS FALSIFIED AND THE RESULT IS BETTER FOR IT. The probe was designed expecting fma to gain LEAST, on the reasoning that two threads share the FPU issue width. It gained MOST. The kernel uses four dependent FMA chains, and at ~4-cycle latency against a 2/cycle issue width a single thread issues about half the peak -- so it is FPU-latency bound, not issue bound, and a second thread fills the gap. The corsys4 validation was consistent with this all along (fma showed a +72% gain); it was read as "SMT helps least" when 86%-of-two-real-cores means "a second thread adds 72% more work". The design intent was wrong, the measurement was right, and the corrected rule -- latency-bound versus throughput-bound -- is more useful than the one intended.
 
 ## Operational pitfalls
 
