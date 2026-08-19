@@ -394,3 +394,45 @@ same node budget, no `MACHINE.md`. Same harness, n=10, Welch, equal-work gate.
 a 2.7% penalty. That is honest content and stays, but it does signpost the
 LULESH answer. The XSBench arm carries no such signpost, which is another reason
 the pair is needed rather than either alone.
+
+## Round 3b: does a document-level scope statement fix the attention failure?
+
+Written 2026-08-19, before the arm runs. The round-3 decomposition established
+that the artifact's facts were correct and correctly applied, and that the arm
+still lost 2x because it did not weigh a source-level property. The proposed fix
+is a paragraph at the top of the briefing telling the reader the document cannot
+see its application.
+
+**Single variable.** The retest briefing is round 3's byte-for-byte, plus one
+paragraph. It was built by inserting into the round-3 file rather than
+re-rendering, because re-rendering would also pull in a pitfall added since and
+the retest would then vary two things.
+
+**The paragraph deliberately does NOT name the mechanism.** A first draft said
+the benchmark "switches to a costlier algorithm whenever more than one OpenMP
+thread is active" -- the exact answer for the code it is about to be tested on.
+That would have tested reading comprehension, not attention, and it is the same
+contamination that burned miniQMC as a test case. It now says only that the
+winning fact was an algorithmic property of the code.
+
+**PREDICTION: the treatment arm weighs the OpenMP cost and moves toward flat
+MPI.** Not necessarily to 125 ranks -- any configuration that avoids the
+expensive force path counts.
+
+**What each outcome means:**
+
+- **It finds the force path.** The fix works and it is document-level: a machine
+  descriptor needs to declare what it cannot see, prominently and at the top,
+  and that is cheap to add to any such artifact.
+- **It does not.** Framing is not the problem. The implication is uncomfortable
+  and worth stating in advance: the artifact may need to be SMALLER rather than
+  better-hedged, because the cost is the reading itself rather than the way it
+  is introduced. That would argue for task-scoped renders -- give a reader only
+  the claims relevant to the decision at hand -- which is already on the
+  project's build list for other reasons.
+- **It finds the force path but still loses.** Then the geometry advice itself
+  is wrong for this code and the NUMA/L3 reasoning needs revisiting.
+
+**Comparison set:** the existing no-artifact (5.47 s) and with-artifact
+(10.98 s) configs are re-timed in the same allocation as the new arm, so drift
+cannot masquerade as an effect. n=5, interleaved, equal-work gate as before.

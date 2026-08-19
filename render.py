@@ -71,6 +71,31 @@ def flatten(v, depth=0):
         w(f'{pad}- {scalar(v)}')
 
 
+
+def conditions_block(w, r, indent=''):
+    """measured_under / not_measured / mechanism, wherever a value appears.
+
+    Defined once and called from every section. These fields were added to
+    numa.*, cpu.* and gpu.* claims but were only rendered in the cost
+    section, so they existed in the artifact and no reader could see them --
+    the same failure as promoting gpu.die_parity out of `flagged` and
+    thereby deleting it from the briefing.
+    """
+    if r.get('measured_under'):
+        w(f'{indent}**Measured under** — holds under these conditions, '
+          f'not known to hold outside them:')
+        for k, v in r['measured_under'].items():
+            w(f"{indent}  - {k.replace('_', ' ')}: {v}")
+        w()
+    if r.get('not_measured'):
+        w(f'{indent}**NOT measured** — no value here, in either direction:')
+        for x in r['not_measured']:
+            w(f"{indent}  - {x}")
+        w()
+    if r.get('mechanism'):
+        w(f"{indent}**Mechanism**: {r['mechanism']}")
+        w()
+
 def main(argv):
     if len(argv) != 2:
         sys.exit(__doc__)
@@ -99,17 +124,53 @@ def main(argv):
       'and the declared value is shown alongside it, because other tools on this '
       'system are still acting on the declared one.')
     w()
+    # Placed BEFORE the rules, not after them. Round 3 measured what a
+    # trailing caveat is worth: an agent read this document, made four correct
+    # machine-level decisions, and lost 2x to one that had read the source. The
+    # limitation is not a footnote to the rules, it is the first thing a reader
+    # needs.
+    # Deliberately does NOT name the mechanism that produced this finding. The
+    # first draft said the benchmark "switches to a costlier algorithm whenever
+    # more than one OpenMP thread is active", which is the exact answer for the
+    # code this warning will next be tested on -- the same contamination that
+    # made miniQMC unusable as a test case. A warning that hands over the answer
+    # tests reading comprehension, not attention.
+    w('**WHAT THIS DOCUMENT CANNOT SEE.** It describes the machine. It knows '
+      'nothing about your application, and for many codes the largest single '
+      'lever is a property of the source rather than of the machine. That is '
+      'measured, not cautionary: an agent working from this document chose SMT, '
+      'page size, rank placement and compiler all correctly, and still ran '
+      '**2x slower** than one that had spent its effort reading the source '
+      'instead. The winning fact was an algorithmic property of the code, worth '
+      'more than every machine-level decision combined, and nothing in this '
+      'document could have contained it. **Before using anything below, read '
+      'the hot loops and establish what limits them.** If the answer is a '
+      'property of the code, this document is not where your answer is, and the '
+      'correct use of it may be to use very little of it.')
+    w()
     w('Rules for reasoning with what follows:')
     w()
     w('1. **Do not upgrade a hedge.** Items under *Unverified* and *Leads* are '
       'not established. Do not present them as facts, and do not build a '
       'recommendation whose correctness depends on them.')
-    w('2. **Conditions are part of every number.** A latency measured on 4K '
-      'pages, or a bandwidth measured across one of four network links, does not '
-      'generalise to other conditions. The conditions are stated; carry them.')
-    w('3. **Regime-dependent costs are not scalars.** Several costs here change '
-      'sign or magnitude with working-set size, offered load, or message size. '
-      'Answer with the regime, not an average.')
+    # Rule 2 used to read "the conditions are stated; carry them". They were
+    # stated -- in prose, after the value -- and an agent still applied a
+    # pointer-chase number to a streaming kernel, where it cost 2.7%. The
+    # instruction now names the fields and the failure mode.
+    w('2. **Read `Measured under` before using any number, and `NOT measured` '
+      'before assuming one applies.** Every measured quantity below is preceded '
+      'by the conditions it was obtained under, and by an explicit list of '
+      'regimes in which no value exists in either direction. **Match those '
+      'against your own kernel before you use the number.** A value used outside '
+      'its regime is not merely less accurate: one of the costs here was '
+      'measured to CHANGE SIGN. If your access pattern, thread count or traffic '
+      'mix is not the one listed, the number does not apply, and this document '
+      'does not tell you what does.')
+    w('3. **Regime-dependent costs are not scalars, and `regime variables` is a '
+      'list.** Several costs change sign or magnitude across working-set size, '
+      'access pattern, offered load or message size. Every listed regime '
+      'variable has to be matched, not just the first one. Answer with the '
+      'regime, not an average.')
     w('4. **Say when the answer is not in here.** This document covers one node '
       'type and, for topology, effectively one node. If a question needs data it '
       'does not contain, say so rather than interpolating.')
@@ -140,6 +201,7 @@ def main(argv):
             flatten({k: v for k, v in dec.items() if k != 'source'}, 0)
             w()
             if r.get('measured') is not None:
+                conditions_block(w, r)
                 w('**Measured**:')
                 flatten(r['measured'], 0)
                 w()
@@ -195,27 +257,7 @@ def main(argv):
             w(c['why_it_matters'])
             w()
 
-            # Conditions BEFORE the value, deliberately. These used to render
-            # after it, in the same trailing position as `note` -- and in
-            # Experiment B an agent read the curve, matched its working set, and
-            # never reached the caveat that the mechanism does not apply to its
-            # access pattern. A qualifier printed after a number is read after
-            # the number is already anchored.
-            if r.get('measured_under'):
-                w('**Measured under** — this value holds under these conditions '
-                  'and is not known to hold outside them:')
-                for k, v in r['measured_under'].items():
-                    w(f"  - {k.replace('_', ' ')}: {v}")
-                w()
-            if r.get('not_measured'):
-                w('**NOT measured** — no value here, in either direction:')
-                for x in r['not_measured']:
-                    w(f"  - {x}")
-                w()
-            if r.get('mechanism'):
-                w(f"**Mechanism**: {r['mechanism']}")
-                w()
-
+            conditions_block(w, r)
             flatten(r['measured'], 0)
             w()
             if r.get('margin'):
