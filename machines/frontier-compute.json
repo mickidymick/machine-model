@@ -996,6 +996,187 @@
         "results-frontier/coll_5307447_*/collectives.csv",
         "results-frontier/coll_5307447_*/conditions.txt"
       ]
+    },
+    {
+      "claim": "cpu.smt_benefit",
+      "verdict": "undeclared",
+      "probe_validated": "yes",
+      "confidence": "high",
+      "declared": null,
+      "measured_under": {
+        "job": "5307847, 2026-08-19, frontier08598",
+        "cores": "all 56 allocatable, held fixed across both arms",
+        "arms": "56 threads at 1/core vs 112 threads at 2/core",
+        "binding": "OMP_PROC_BIND=close; OMP_PLACES=cores (1/core) or threads (2/core)",
+        "passes": "3, arms in rotating order",
+        "kernels": "per-thread working sets of 64 MB (chase, stream) and 64 KB (fma)"
+      },
+      "measured": {
+        "unit": "fraction of additional work from the second hardware thread",
+        "regime_variables": [
+          "what limits the kernel"
+        ],
+        "by_kernel": [
+          {
+            "kernel": "chase",
+            "limit": "memory latency, dependent loads",
+            "smt_gain": "+69.7%"
+          },
+          {
+            "kernel": "fma",
+            "limit": "FPU latency -- 4 dependent chains under-saturate a 2/cycle issue width",
+            "smt_gain": "+78.2%"
+          },
+          {
+            "kernel": "stream",
+            "limit": "memory BANDWIDTH, saturated",
+            "smt_gain": "-5.0%"
+          }
+        ]
+      },
+      "not_measured": [
+        "A genuinely issue-saturated FPU kernel. The fma kernel was DESIGNED to be one and is not -- see the mechanism. Whether SMT hurts when the issue width is actually saturated remains open, and it is the case where the original prediction might still hold.",
+        "Thread counts between 56 and 112, so the shape of the transition is unknown.",
+        "Mixed workloads, where different threads are limited by different resources.",
+        "Anything at fewer than 56 threads -- and this matters: the corsys4 validation at 2 threads gave stream +88%, the opposite sign to Frontier at 56. Saturation is the mechanism, so a low-thread measurement cannot predict a high-thread one."
+      ],
+      "mechanism": "SMT adds a second instruction stream to a core, so it helps exactly when the core is IDLE waiting -- and not at all when the core is already saturating a shared resource. Both latency-bound kernels gain ~70-78% whether they wait on memory (chase) or on FPU result latency (fma); the bandwidth-saturated kernel loses 5%. The distinction is latency-bound versus throughput-bound, NOT memory versus compute.",
+      "margin": "A 75-point spread between kernels on the same node in the same job: +78.2% to -5.0%. Any single answer to \"should I use SMT\" is wrong for some of these.",
+      "consequence": "A code told to use 112 threads because \"SMT helps\" loses 5% if it is bandwidth bound; one told to use 56 because \"SMT hurts on HPC codes\" leaves ~70% on the table if it is latency bound.",
+      "note": "THE PREDICTION WAS FALSIFIED AND THE RESULT IS BETTER FOR IT. The probe was designed expecting fma to gain LEAST, on the reasoning that two threads share the FPU issue width. It gained MOST. The kernel uses four dependent FMA chains, and at ~4-cycle latency against a 2/cycle issue width a single thread issues about half the peak -- so it is FPU-latency bound, not issue bound, and a second thread fills the gap. The corsys4 validation was consistent with this all along (fma showed a +72% gain); it was read as \"SMT helps least\" when 86%-of-two-real-cores means \"a second thread adds 72% more work\". The design intent was wrong, the measurement was right, and the corrected rule -- latency-bound versus throughput-bound -- is more useful than the one intended.",
+      "evidence": [
+        "results-frontier/smt_5307847_*/smt.csv",
+        "results-frontier/smtalloc_5307829.out (which srun form yields 112 CPUs)"
+      ]
+    },
+    {
+      "claim": "cost.storage_bands",
+      "verdict": "misleading",
+      "probe_validated": "yes",
+      "confidence": "medium",
+      "declared": {
+        "source": "lfs getstripe -d $MEMBERWORK -- 7-component Progressive File Layout",
+        "boundaries": [
+          "< 256 KiB: MDT (Data-on-MDT)",
+          "256 KiB - 8 MiB: pool `performance`, 1 stripe",
+          "8 MiB - 128 GiB: pool `capacity`, 1 stripe, self-extending",
+          "> 128 GiB: pool `capacity`, 8 stripes"
+        ],
+        "implication": "a file changes pool at 8 MiB, so behaviour should change there"
+      },
+      "measured_under": {
+        "job": "5307805, 2026-08-19, 1 node",
+        "writers": 1,
+        "source": "incompressible (/dev/urandom buffer, reused)",
+        "durability": "fsync per file",
+        "target": "$MEMBERWORK project directory on orion",
+        "machine_state": "9608 nodes running machine-wide -- the filesystem is SHARED",
+        "passes": 3
+      },
+      "measured": {
+        "unit": "MB/s, median of 3 passes",
+        "regime_variables": [
+          "file size",
+          "storage tier",
+          "number of writers (NOT swept)"
+        ],
+        "lustre_by_size": [
+          {
+            "bytes": 131072,
+            "MBps": 0.9,
+            "declared_band": "MDT"
+          },
+          {
+            "bytes": 262144,
+            "MBps": 7.1,
+            "declared_band": "performance",
+            "step": "8.1x -- the 256 KiB boundary IS observable"
+          },
+          {
+            "bytes": 524288,
+            "MBps": 5.3,
+            "declared_band": "performance"
+          },
+          {
+            "bytes": 4194304,
+            "MBps": 108.8,
+            "declared_band": "performance"
+          },
+          {
+            "bytes": 8388608,
+            "MBps": 137.1,
+            "declared_band": "capacity",
+            "step": "1.26x -- the 8 MiB boundary is NOT observable; the climb is smooth"
+          },
+          {
+            "bytes": 16777216,
+            "MBps": 130.9,
+            "declared_band": "capacity"
+          },
+          {
+            "bytes": 67108864,
+            "MBps": 355.8,
+            "declared_band": "capacity"
+          },
+          {
+            "bytes": 268435456,
+            "MBps": 721.1,
+            "declared_band": "capacity"
+          },
+          {
+            "bytes": 1073741824,
+            "MBps": 812.0,
+            "declared_band": "capacity"
+          }
+        ],
+        "nvme_vs_lustre": [
+          {
+            "bytes": 8388608,
+            "nvme_MBps": 536.4,
+            "lustre_MBps": 137.1,
+            "ratio": "3.91x"
+          },
+          {
+            "bytes": 67108864,
+            "nvme_MBps": 755.9,
+            "lustre_MBps": 355.8,
+            "ratio": "2.12x"
+          },
+          {
+            "bytes": 268435456,
+            "nvme_MBps": 475.7,
+            "lustre_MBps": 721.1,
+            "ratio": "0.66x"
+          },
+          {
+            "bytes": 1073741824,
+            "nvme_MBps": 438.4,
+            "lustre_MBps": 812.0,
+            "ratio": "0.54x"
+          }
+        ],
+        "explicit_stripe_8_at_1GiB": {
+          "default_MBps": 805.7,
+          "stripe8_MBps": 751.6,
+          "ratio": "0.93x",
+          "replication": "0.97x in job 5307700 -- a replicated null"
+        },
+        "metadata_creates_per_sec": "1500-1815 (0-byte files, Data-on-MDT band)"
+      },
+      "not_measured": [
+        "MULTIPLE WRITERS. Every number here is one writer, and that is the case where striping and tier choice are most likely to behave differently. The striping null should NOT be generalised to a parallel write.",
+        "The 128 GiB boundary, where the declared layout finally uses 8 stripes.",
+        "Reads.",
+        "A quiet filesystem. Pass-to-pass spread reached 4x at 1 GiB in an earlier run; orion is shared and this varies with what everyone else is doing."
+      ],
+      "mechanism": "Small-file bandwidth is dominated by fixed per-file cost, which is why the curve climbs monotonically from 128 KiB to 1 GiB regardless of pool. The 256 KiB boundary is visible because Data-on-MDT is a different mechanism, not a faster disk. Node-local NVMe wins at small sizes because it avoids the network and the OST round trip, and LOSES at large sizes because a single device has a fixed write ceiling while Lustre aggregates many OSTs behind a write-back cache.",
+      "margin": "The NVMe-vs-Lustre ratio CROSSES OVER between 64 MiB and 256 MiB: 3.91x in favour of local at 8 MiB, 0.54x against it at 1 GiB.",
+      "consequence": "A user told \"node-local is faster because it is local\" is right below ~100 MB and wrong above it, by nearly 2x at 1 GiB -- which is the size range checkpoints occupy. And effort spent setting an explicit stripe count buys nothing for a single writer.",
+      "note": "SPLIT VERDICT on the declared layout, which is why this is `misleading` rather than confirmed or contradicted. The 256 KiB boundary is observable (8.1x step). The 8 MiB pool change -- the one a user would most want to act on, since it silently moves data from `performance` to `capacity` -- produces NO observable step at single-writer scale. The layout declares a transition that a user cannot detect and therefore cannot act on.",
+      "evidence": [
+        "results-frontier/stor_5307805_*/storage.csv",
+        "results-frontier/stor_5307805_*/declared_layout.txt"
+      ]
     }
   ],
   "flagged": [

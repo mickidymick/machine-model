@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.5",
+  "registry_version": "0.6",
   "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
   "verdicts": {
     "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
@@ -508,6 +508,47 @@
       "verdict_rule": "undeclared -- nothing publishes this. The finding is whether the size and rank axes have the SAME shape: if they do, one curve suffices; if not, the cost is a surface and any scalar or single curve is wrong somewhere.",
       "consequence_if_wrong": "A scaling study extrapolated from point-to-point or from one message size predicts the wrong rank count to stop at.",
       "portability": "Universal."
+    },
+    {
+      "id": "cpu.smt_benefit",
+      "domain": "cpu",
+      "declares": "Whether using the second hardware thread of each core adds work, and for which kinds of kernel.",
+      "declared_source": null,
+      "why_it_matters": "Every user sets --threads-per-core on every job, and no source says what it is worth here. The answer is regime-dependent by nature, so a single number would be wrong for half of all codes.",
+      "probe": {
+        "id": "smt-kernels",
+        "tool": "src/smt_probe.c -- dependent pointer chase, sequential stream, dependent FMA chain",
+        "rationale": "All cores held fixed; only whether the second hardware thread is used varies. That is the comparison a user faces. Multiple kernels because one would give a confidently wrong single answer.",
+        "conditions": {
+          "cores": "all allocatable, fixed across arms",
+          "note": "the JOB must be allocated 2 threads/core or no step can request them"
+        }
+      },
+      "verdict_rule": "undeclared. The finding is whether the kernels DISAGREE: if they do, no single answer exists and the claim must be a rule keyed on what limits the kernel.",
+      "consequence_if_wrong": "Half the node idle, or every core oversubscribed with threads competing for a resource that is already saturated.",
+      "portability": "Universal wherever SMT exists."
+    },
+    {
+      "id": "cost.storage_bands",
+      "domain": "cost",
+      "declares": "Write bandwidth as a function of file size and storage tier, and whether the declared layout boundaries are observable.",
+      "declared_source": {
+        "primary": "lfs getstripe -d on the work filesystem -- the Progressive File Layout declares size thresholds and pool assignments"
+      },
+      "why_it_matters": "A simulation exists to write data. The declared layout says where a file goes and when it moves between pools; whether those thresholds are observable decides if a user can act on them.",
+      "probe": {
+        "id": "storage-bands",
+        "tool": "slurm/storage.sbatch -- sizes straddling each declared boundary, default vs explicit stripe, and each tier",
+        "rationale": "INCOMPRESSIBLE source data is mandatory: writing /dev/zero to a device-mapper target reports impossible bandwidth because zero blocks are elided. conv=fsync likewise, or the page cache is measured instead of the filesystem.",
+        "conditions": {
+          "writers": "1 -- multi-writer is a different question",
+          "source": "incompressible",
+          "durability": "fsync per file"
+        }
+      },
+      "verdict_rule": "confirmed where a declared boundary produces an observable step; misleading where it does not, since the layout then describes something a user cannot act on.",
+      "consequence_if_wrong": "Bulk output written to the wrong tier, or effort spent tuning a stripe count that does nothing.",
+      "portability": "Universal in shape; the specific thresholds are per-filesystem."
     }
   ]
 }
