@@ -658,14 +658,14 @@
         "write or mixed traffic",
         "under memory load from co-resident ranks"
       ],
-      "mechanism": "The penalty comes from TLB reach failure on accesses that cannot be prefetched. 32 MB needs 8192 PTEs at 4 KB, far past the ~8 MB L2 TLB reach, so every access pays a page walk that itself misses to memory. It exists only where BOTH hold: the working set exceeds TLB reach, AND the access pattern defeats prefetch. A kernel that streams contiguously amortises the walk across the whole page and should expect no benefit -- and, measured on miniQMC, a 2.7% PENALTY.",
+      "mechanism": "The penalty comes from TLB reach failure on accesses that cannot be prefetched. 32 MB needs 8192 PTEs at 4 KB, far past the ~8 MB L2 TLB reach, so every access pays a page walk that itself misses to memory. It exists only where BOTH hold: the working set exceeds TLB reach, AND the access pattern defeats prefetch. A kernel that streams contiguously amortises the page walk across the whole page, so the mechanism is absent and no benefit should be expected.",
       "margin": "Zero, then 2.4x, then a constant offset. There is no single number that describes this.",
       "consequence": "TLB misses reported as memory latency. The worst case is at a working set that still fits in cache, which is exactly where a developer would not look for it.",
       "evidence": [
         "results-frontier/cpu_curve.txt",
         "results-frontier/cpu_curve_4k.txt"
       ],
-      "note": "MEASURED CONSEQUENCE OF MISAPPLYING THIS: in Experiment B (2026-08-13) an agent matched its working set against the curve above -- correctly, per the declared regime variable -- and enabled huge pages for a streaming kernel. It cost 2.7% (p=3e-10). The number did not fail to transfer; it inverted. That is why regime_variables is a list and why measured_under exists."
+      "note": "MEASURED CONSEQUENCE OF USING THIS OUTSIDE ITS REGIME: an agent matched a streaming kernel's working set against the curve above -- correctly, per the regime variable declared at the time -- and enabled huge pages for it. It cost 2.7% (p=3e-10) rather than helping. The number did not merely fail to transfer; it inverted. That is why regime_variables is a list and why measured_under exists. Full write-up in eval/exp-b/RESULTS.md."
     },
     {
       "claim": "cost.loaded_latency_knee",

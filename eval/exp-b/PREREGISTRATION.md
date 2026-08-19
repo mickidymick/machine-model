@@ -345,3 +345,52 @@ behaviour is undocumented, so the surface is much larger. Expect the artifact to
 do better there, and note in advance that this is closer to CONFIRMATION than
 discovery: Experiment A already predicts it. XSBench x {Frontier, corsys4} gives
 a clean 2x2 of access pattern against documentation level.
+
+## Round 3 design: the SAME field must produce OPPOSITE decisions (2026-08-19)
+
+The plan in NEXT.md was to re-run Experiment B on miniQMC with the regime-aware
+briefing. **That test is now invalid and would have been run anyway if the
+briefing had not been re-read.**
+
+`cost.page_size_penalty`'s `mechanism` field had been written to end with "and,
+measured on miniQMC, a 2.7% PENALTY", and `note` repeated it. Re-running on
+miniQMC would have measured whether an agent can read a direct statement about
+that exact benchmark. It would have passed, and it would have shown nothing.
+Fixed: `mechanism` now states only the physics, and the incident is recorded
+once in `note` without naming the benchmark.
+
+**miniQMC is burned as a test case regardless.** The artifact honestly records
+what happened there, and that record is worth more than the benchmark's reuse.
+
+### The design that actually tests the fix
+
+One artifact field, two benchmarks with opposite access patterns, and the
+correct decision is opposite in each. That cannot be passed by pattern-matching
+a warning, because half the time the correct action is to TAKE huge pages.
+
+| benchmark | access pattern | mechanism present? | correct decision | prediction |
+|---|---|---|---|---|
+| **XSBench** | random binary search over a multi-GB table | YES | take huge pages | with-artifact takes them and WINS |
+| **LULESH** | structured mesh, largely streaming | NO | decline them | with-artifact declines; arms TIE, or it wins on something else |
+
+**What each outcome means**
+
+- **Both correct** — the regime fields work. The strongest available result, and
+  the only one that distinguishes "reads the conditions" from "avoids the scary
+  number".
+- **XSBench right, LULESH wrong** — the fields prevent nothing; the arm is
+  taking huge pages by default and happened to be right once.
+- **XSBench wrong, LULESH right** — we have taught it to fear the number rather
+  than to match the regime. That is a WORSE artifact than before, because it now
+  suppresses a real 2.4x where the mechanism genuinely applies. This is the
+  outcome to watch for, and the one the single-benchmark design could not see.
+- **Both wrong** — the structured-fields hypothesis is dead and the problem is
+  not presentation.
+
+**Control unchanged:** no-artifact arms get the same benchmark, same problem,
+same node budget, no `MACHINE.md`. Same harness, n=10, Welch, equal-work gate.
+
+**Declared weakness:** the `note` field states that a streaming kernel measured
+a 2.7% penalty. That is honest content and stays, but it does signpost the
+LULESH answer. The XSBench arm carries no such signpost, which is another reason
+the pair is needed rather than either alone.
