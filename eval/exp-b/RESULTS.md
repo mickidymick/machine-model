@@ -218,3 +218,87 @@ This is why `measured_under` must be a matchable record of the conditions rather
 than a prose note, and why `regime_variable` must be a list. It also raises the
 bar for the retrofit: every existing cost claim needs asking "what else did we
 hold fixed that we never declared?", not just "did we write down the conditions".
+
+---
+
+# ROUND 3, LULESH — 2026-08-19. The artifact arm is 2x slower.
+
+| arm | mean s | sd | geometry |
+|---|---|---|---|
+| no-artifact | **5.42** | 0.007 (0.12%) | 125 ranks x 1 thread, flat MPI |
+| with-artifact | **10.93** | 0.025 (0.23%) | 8 ranks x 7 threads, one per L3 group |
+
+Welch t = -483, p = 6.2e-12, n = 5. Equal work verified: both 729,000 elements
+(125 x 18^3 and 8 x 45^3).
+
+## What the with-artifact arm did, and it is not incompetence
+
+Its reasoning is dense with correctly-applied artifact facts:
+
+- **SMT off**, citing `cpu.smt_benefit`: *"latency-bound kernels gain +70-78%, the
+  BANDWIDTH-SATURATED stream kernel loses 5.0%. LULESH sweeps element and node
+  arrays contiguously... which is the arm that LOSES."*
+- **Huge pages declined**, citing `cost.page_size_penalty`'s mechanism and the
+  recorded inversion.
+- **8 ranks**, one per L3 group, citing NPS4 and first-touch.
+
+Every one of those uses a measured claim correctly, including two added the same
+day. This is the artifact working as designed.
+
+## What it never weighed
+
+The no-artifact arm read the source and found the dominant lever:
+
+> whenever `omp_get_max_threads() > 1`, LULESH switches to a completely different
+> force-summation algorithm... ~768 extra bytes of memory traffic per element per
+> cycle, twice a cycle, on top of roughly 2 KB/element/cycle -- i.e. ~35% more
+> DRAM traffic on a node that is already memory-bandwidth bound. Running MPI-only
+> keeps the cheap path.
+
+The with-artifact arm's SOLUTION.sh contains **zero mentions** of it, though its
+post-hoc answer lists the force-accumulation path among what it read. So it saw
+the fact and did not weight it, which is worse than missing it: the machine
+document won an argument against a source fact already in hand.
+
+## The claim this supports, stated carefully
+
+NOT "the artifact gives bad advice" -- every number it used was correct, and
+correctly conditioned.
+
+**A rich machine document changes where a model spends its attention, and
+attention is finite.** The treatment arm reasoned about four machine properties
+and one application property; the control reasoned about one machine property
+and three application properties, and the application properties were where the
+performance was.
+
+This is the SECOND instance. It was flagged as a risk before round 2 --
+"a machine-shaped document nudges toward machine-shaped answers on a code whose
+main lever is an application property" -- and miniQMC was the first, at 2.9%.
+LULESH is the same shape at 102%.
+
+## Attribution is NOT established
+
+The two configs differ in several ways at once and a one-knob decomposition is
+required before any causal claim:
+
+- **125 vs 56 hardware threads.** The control used 2.2x more of the node. This
+  alone could explain most of the gap and has nothing to do with attention.
+- **flat MPI vs hybrid**, which is what triggers the expensive force path.
+- **SMT on vs off**, tangled with the above.
+
+Decomposition needed: (a) 8 ranks x 7 threads with SMT ON, to test whether the
+`cpu.smt_benefit` classification was itself wrong; (b) 56 ranks x 1 thread flat
+MPI without SMT, to separate "more threads" from "cheap force path"; (c) 125
+ranks with the OpenMP build, to isolate the force path directly.
+
+Until those run, the honest statement is: the control was twice as fast, its
+own account credits a source-level fact worth ~35% memory traffic, and the
+treatment arm never weighed that fact.
+
+## And a caveat about this run specifically
+
+Both arms ran under `-S 0 --threads-per-core=2`, a permissive allocation chosen
+so each arm could have the flags it asked for. That means **no core
+specialization**, which is not the Frontier default and is not the environment
+either arm reasoned about. Applied equally, so not an arm-vs-arm confound, but
+it is not the production configuration.
