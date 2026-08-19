@@ -23,6 +23,18 @@ case "$BENCH" in
     PIN=5ed650c8c390884d6a84f002be2bbfa103b7df3e
     DEST="$D/pristine-miniqmc"
     ;;
+  xsbench)
+    URL=https://github.com/ANL-CESAR/XSBench.git
+    # Pinned 2026-08-19, matches upstream HEAD at pin time.
+    PIN=ba08e5221af6106252b866e50ea123c69d31a4e2
+    DEST="$D/pristine-xsbench"
+    ;;
+  lulesh)
+    URL=https://github.com/LLNL/LULESH.git
+    # Pinned 2026-08-19, matches upstream HEAD at pin time.
+    PIN=3e01c40b3281aadb7f996525cdd4a3354f6d3801
+    DEST="$D/pristine-lulesh"
+    ;;
   *) echo "unknown benchmark: $BENCH" >&2; exit 1 ;;
 esac
 
