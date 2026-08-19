@@ -216,6 +216,12 @@ def report_manipulation(by, meta):
 
 # ------------------------------------------------------------------- reports
 def main(path, svg_out=None):
+    # Name the source file and its age. The previous run analysed a stale
+    # rebuilt CSV because `ls -t` matched it, and nothing in the output said
+    # which file had been read, so the numbers looked like a fresh result.
+    import os, time
+    mtime = time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(path)))
+    print(f"source: {path}   (written {mtime})")
     by, meta = load(path)
     work_ok = check_equal_work(by, meta)
     report_manipulation(by, meta)

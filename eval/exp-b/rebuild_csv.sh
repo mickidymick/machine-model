@@ -26,7 +26,13 @@ if [ -z "$STAMP" ]; then
   echo "using stamp $STAMP" >&2
 fi
 
-CSV="$OUT/${BENCH}_${STAMP}.rebuilt.csv"
+# Written to a SUBDIRECTORY, not alongside the original. Both files used to
+# match results/<bench>_*.csv, so `ls -t` picked whichever was touched last --
+# and a rebuild is by definition newer than the run it rebuilds. That silently
+# fed a stale two-config CSV to collect.py while a four-config job was still
+# queued, and the output looked entirely valid.
+mkdir -p "$OUT/rebuilt"
+CSV="$OUT/rebuilt/${BENCH}_${STAMP}.csv"
 echo "pass,config,seconds,solve_s,fom,work,ranks,threads,exit" > "$CSV"
 
 n=0; bad=0
