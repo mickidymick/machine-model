@@ -1264,6 +1264,13 @@
       "cause": "/tmp, /dev/shm and /rootfs.rw are all tmpfs on Frontier compute nodes -- they are RAM. Every byte written counts against the node memory the job is using. The 252 G figure is a tmpfs size limit, not free storage. /var/tmp and /mnt/bb are overlay, and /mnt/bb is NOT writable by default despite every node advertising the `nvme` Slurm feature, VERIFIED 2026-08-18: `-C nvme` mounts /dev/mapper/nvme-bb, an xfs filesystem of 3.4 TB, at /mnt/bb/$USER and it is writable. Without that constraint the device is present but unmounted, so df shows only the tmpfs and a user reading df gets the wrong answer twice: /tmp looks like local disk and is RAM, while 3.4 TB of real local disk is invisible.",
       "remedy": "Write bulk output to $MEMBERWORK or $PROJWORK (Lustre), or request node-local NVMe with `#SBATCH -C nvme` and use /mnt/bb/$USER. Use /tmp only for small transient files and count them against the memory budget.",
       "sting": "Observed on frontier06028, 2026-08-18. $HOME is NFS and not Lustre either (lfs exits 25 there), so neither of the two paths a user reaches for by habit is the right one for bulk I/O."
+    },
+    {
+      "id": "hugepages-incompatible-with-prgenv-amd",
+      "symptom": "A build that works under PrgEnv-gnu fails to LINK under PrgEnv-amd with \"ld.lld: error: -Ttext-segment is not supported. Use --image-base if you intend to set the base address\". Nothing in the message mentions huge pages.",
+      "cause": "craype-hugepages<N> injects -Wl,-Ttext-segment=0x20000000 into the link line (visible as PE_HUGEPAGES_TEXT_SEGMENT in the wrapper's pkg-config call). -Ttext-segment is a GNU ld option; PrgEnv-amd links with lld, which rejects it. The two modules are mutually exclusive and neither says so.",
+      "remedy": "Use PrgEnv-gnu (or another GNU-ld toolchain) if huge pages are wanted, or drop the hugepages module if PrgEnv-amd is wanted. There is no flag that reconciles them; --image-base is the lld spelling but the module does not emit it.",
+      "sting": "Observed 2026-08-19 building XSBench. Both choices are individually reasonable -- AMD compiler for AMD hardware, huge pages for a TLB-bound kernel -- and only the COMBINATION fails. The error names neither module, so it reads as a source or toolchain problem rather than a module conflict."
     }
   ],
   "open_questions": [
