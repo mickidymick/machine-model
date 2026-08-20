@@ -20,3 +20,6 @@ eval/exp-b/arms-r3/*/*/src/
 eval/exp-b/arms-r3/*/*/build/
 eval/exp-b/results/*.log
 eval/exp-b/arms/*/*/SOLUTION.sh
+
+# Related-work PDFs are fetched, not authored; papers/README.md indexes them.
+papers/*.pdf
