@@ -82,9 +82,45 @@ def main(argv):
     # value whose conditions are undeclared, which a reader will therefore treat
     # as unconditional. Reported, not fatal -- the retrofit is in progress and a
     # hard failure would only get worked around.
+    # The rule is NOT "cost.* claims". It is: any claim whose measured value is
+    # a QUANTITY WITH UNITS needs its conditions declared. A count (4 NUMA
+    # domains) or a state (THP is never) has no regime; a latency in ns does,
+    # and numa.distance_matrix is a pointer-chase measurement exactly as
+    # cost.page_size_penalty was. Restricting the check to cost.* was arbitrary
+    # and would have left the artifact's flagship claim unconditioned.
+    PHYSICAL = {'ns', 'us', 'µs', 'ms', 's', 'MB/s', 'GB/s', 'GiB/s', 'MiB/s',
+                'bytes', 'B/s', 'ns/access'}
+
+    def carries_a_quantity(measured):
+        """A physical quantity, not a count.
+
+        Matching on the presence of the KEY 'unit' was wrong: cpu.core_inventory
+        carries {"value": 56, "unit": "usable cores"} and gpu.device_inventory
+        {"value": 8, "unit": "schedulable GCDs"}. Those are counts. A count has
+        no regime -- there is no access pattern under which the node has a
+        different number of cores. Match the unit's VALUE against physical
+        units, plus any latency/bandwidth key.
+        """
+        found = []
+
+        def walk(o, key=None):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if k in ('latency', 'bandwidth') or k.endswith(('_ns', '_us', '_GBs')):
+                        found.append(k)
+                    walk(v, k)
+            elif isinstance(o, list):
+                for v in o:
+                    walk(v, key)
+            elif isinstance(o, str) and key in ('unit', 'units') and o in PHYSICAL:
+                found.append(o)
+
+        walk(measured)
+        return bool(found)
+
     undeclared_conditions = [
         r['claim'] for r in desc['results']
-        if r['claim'].startswith('cost.') and not r.get('measured_under')
+        if carries_a_quantity(r.get('measured')) and not r.get('measured_under')
     ]
     for cid in results:
         if cid not in claims:
@@ -122,10 +158,10 @@ def main(argv):
               f"{len(claims)} claims, all answered\n")
 
     if undeclared_conditions:
-        print(f"cost claims with no measured_under ({len(undeclared_conditions)}):")
+        print(f"claims carrying a measured QUANTITY with no measured_under ({len(undeclared_conditions)}):")
         for c in undeclared_conditions:
             print(f"  ~ {c}")
-        print("    A cost value whose conditions are undeclared reads as unconditional.")
+        print("    A measured value whose conditions are undeclared reads as unconditional.")
         print("    Experiment B measured what that costs: an agent matched its working")
         print("    set against cost.page_size_penalty's declared regime variable --")
         print("    correctly -- and applied a pointer-chase number to a streaming")

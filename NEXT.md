@@ -95,12 +95,24 @@ artifact claim could bind. The arm's "bandwidth-saturated" call was wrong and th
 
 ## QUEUE, in order
 
-1. **Rewrite `eval/characterize/SPEC.md`.** Every probe in it measures a machine
-   RESPONSE (SMT, huge pages, NUMA, thread scaling), and responses don't transfer
-   between machines. Rewrite to measure transferable app PROPERTIES — footprint
-   in bytes, comm volume, I/O volume, access-pattern character — and derive the
-   machine-specific label by joining with the artifact. Add the corsys4→Frontier
-   transfer test as its validation.
+1. ~~**Rewrite `eval/characterize/SPEC.md`.**~~ **DONE 2026-08-20.** Ten
+   transferable properties (P1–P10), three measurement tiers (analytic /
+   counted / inferred), explicit join rules, and the corsys4→Frontier transfer
+   test with a negative control. Three things came out of writing it:
+
+   - **The join is `measured_under` matching.** A claim's `measured_under` names
+     the application properties under which its number holds; the app profile
+     names the app's properties; the join is matching them. That makes rendering
+     conditions before the value structural, not a hedge.
+   - **The premise is already proven in-repo.** `stream` gained +88% from SMT on
+     corsys4 at 2 threads and lost 5.0% on Frontier at 56; the identical
+     pointer-chase shows two page-size peaks on corsys4 and one on Frontier.
+     Same code, different response.
+   - **The join needs four claims the registry does not have** — see below.
+
+   Next concrete step is the per-app `analytic.md` derivations (tier 1, zero
+   runs), starting with LULESH's bytes-per-element-update, which round 3's
+   winning arm already computed from source.
 
 2. **Settle the behaviour axes and pick training-set candidates.** Rule: every
    registry claim binds for at least one app; no app exercises more than a few.
@@ -117,6 +129,24 @@ artifact claim could bind. The arm's "bandwidth-saturated" call was wrong and th
 5. **Endgame: the sweep comparison.** Diagnostic runs + machine knowledge vs a
    combinatorial config sweep, and at what fraction of the cost. Last, not first
    — run it now and it measures our current known-bad state.
+
+## NEW ARTIFACT WORK, exposed by writing the join
+
+Writing the derivation rules found four quantities the join needs and the
+registry does not carry. Each is a candidate claim:
+
+- **TLB reach** (entries × page size, per level). The registry has
+  `cost.page_size_penalty`, which is the *response of our own pointer-chase
+  kernel* — itself a code-machine pair. The structural quantity that lets a
+  different code's page demand predict its penalty is recorded on neither
+  machine. This is the same structural gap as `cost.page_size_penalty` being
+  "the first entry hwloc's data model structurally cannot hold".
+- **Bandwidth per domain vs per node**, as a claim with its own conditions.
+  Currently buried inside `cost.loaded_latency_knee` and `numa.distance_matrix`.
+- **Per-core outstanding-miss capacity** (line-fill buffers / MSHRs). Sets
+  whether a code's miss concurrency can reach the bandwidth ceiling at all.
+- **Synchronisation cost** — barrier and atomic latency at a given thread count.
+  A `synchronisation-bound` label is underivable without it.
 
 ## STILL OPEN FROM BEFORE
 
