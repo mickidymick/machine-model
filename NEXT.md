@@ -78,3 +78,52 @@ Harness rules that follow: sanity-floor every probe against a physical ceiling;
 always pass `-o` to sbatch; verify directives by anchored grep, not bare string
 match (a comment matched once and hid a missing `#SBATCH` line); check
 arithmetic before submitting (64 was an illegal LULESH rank count).
+
+
+---
+
+# 2026-08-20 — design session, no runs
+
+Read `machine-model-scope-decisions` in memory first; it holds the reasoning.
+
+## THE CORRECTION THAT MATTERS
+
+Round 3 ran LULESH at **230 MB on a 512 GB node** — cache-resident, so almost no
+artifact claim could bind. The arm's "bandwidth-saturated" call was wrong and the
+`cpu.smt_benefit` agreement to 0.6pp was coincidence. Correction is appended to
+`eval/exp-b/RESULTS.md`. **Problem size is a selection criterion.**
+
+## QUEUE, in order
+
+1. **Rewrite `eval/characterize/SPEC.md`.** Every probe in it measures a machine
+   RESPONSE (SMT, huge pages, NUMA, thread scaling), and responses don't transfer
+   between machines. Rewrite to measure transferable app PROPERTIES — footprint
+   in bytes, comm volume, I/O volume, access-pattern character — and derive the
+   machine-specific label by joining with the artifact. Add the corsys4→Frontier
+   transfer test as its validation.
+
+2. **Settle the behaviour axes and pick training-set candidates.** Rule: every
+   registry claim binds for at least one app; no app exercises more than a few.
+   Check by mapping candidates against `registry/claims.json`. Keep a held-out
+   test set — miniQMC and LULESH are already partly burned.
+
+3. **Characterize each candidate** and choose the size where the target regime
+   actually appears. Analytic where possible (footprint, comm volume).
+
+4. **Then the 2x3.** {machine layout, web, artifact} × {with, without profile}.
+   The interaction is the hypothesis: regime-dependent claims are only usable by
+   a reader that knows its own regime.
+
+5. **Endgame: the sweep comparison.** Diagnostic runs + machine knowledge vs a
+   combinatorial config sweep, and at what fraction of the cost. Last, not first
+   — run it now and it measures our current known-bad state.
+
+## STILL OPEN FROM BEFORE
+
+- One-knob confirmation that round 3b's 2.45 s is the MALLOC change (the arms
+  also differ in `OMP_DYNAMIC`).
+- XSBench comparison missing — its no-artifact arm failed to build
+  (`craype-hugepages2M` + `PrgEnv-amd` = lld rejects `-Ttext-segment`).
+- Second draw per arm; every result rests on one stochastic generation.
+- corsys4 conditions retrofit (6 claims flagged). Registry pin 0.1 vs 0.6.
+- Task-scoped renders (`render.py --for <task>`) — the next artifact lever.
