@@ -455,3 +455,75 @@ The two artifact arms differ in the two `MALLOC_*` variables and
 the allocator change, but a one-knob run -- unscoped arm plus the two MALLOC
 variables and nothing else -- would settle whether the 2.45 s is entirely that.
 Not yet done.
+
+---
+
+# CORRECTION — 2026-08-20. Round 3 ran in the wrong regime.
+
+Jeff pointed out that LULESH does not become memory-bound until roughly 20 GB
+RSS. We ran **230 MB across the whole node** — 28 MB per rank at 8x45^3, against
+a 32 MB L3 region. On a 512 GB node that is 0.04% of memory, and essentially
+cache-resident in every configuration tested.
+
+## What that invalidates
+
+**"Every application of the artifact's facts was correct" is wrong.** The
+treatment arm classified LULESH as *bandwidth-saturated* to justify disabling
+SMT. At 28 MB per rank it was not bandwidth-saturated; it was cache-resident.
+The classification was wrong.
+
+**"cpu.smt_benefit validated to 0.6 percentage points" is a coincidence, and I
+reported it as validation.** SMT did measure -5.6% against a predicted -5.0%,
+but the mechanism is not the one the claim describes. Two threads x 28 MB is
+56 MB against a 32 MB L3, so the working set spills — a CACHE CAPACITY effect,
+not bandwidth saturation. Right number, wrong cause, and the agreement made a
+claim look tested when it was not.
+
+**The attention finding is much weaker than stated.** At this size almost none
+of the artifact's claims could bind: `distance_matrix` barely applies when data
+does not leave L3, `loaded_latency_knee` needs a saturated memory system,
+`page_size_penalty` needs to exceed TLB reach with unprefetchable access. The
+only claim genuinely in play was `cache_hierarchy`. So "the model spent its
+reasoning on machine facts instead of source facts" is close to tautological
+here — there was nothing for the machine facts to be right *about*.
+
+## What survives
+
+- The measured times are real: 5.43 s vs 10.95 s, tight variance, equal work.
+- Flat MPI beat hybrid by 2.12x **at this problem size**.
+- The scope paragraph recovered 44% **at this problem size**.
+- The source fact is size-independent: the `numthreads > 1` force-summation path
+  allocates 8*numElem temporaries whatever the mesh size.
+
+Note also that a 35% memory-traffic argument does not by itself explain a 2.12x
+slowdown. The gather through `nodeElemCornerList` is indirect and cache-hostile,
+so the cost is probably locality rather than volume — which means even the
+control's stated mechanism is incomplete, though its decision was right.
+
+## The lesson, which belongs in the training-set design
+
+**Problem size must be chosen so the machine facts have room to bind.** A
+footprint that fits in L3 cannot test claims about NUMA distance, loaded
+latency, or page-size penalty. We selected 729,000 elements to keep runs inside
+a 15-minute budget, and optimised the harness at the expense of the experiment.
+
+Sizes that reach a memory-bound regime, all divisible by 2, 3 and 5 so the
+8/27/125-rank decompositions stay legal:
+
+| global | elements | approx RSS |
+|---|---|---|
+| 300^3 | 27.0 M | ~8 GB |
+| 390^3 | 59.3 M | ~18 GB |
+| 450^3 | 91.1 M | ~27 GB |
+
+At 390^3 the element count is 81x what we ran, so `-i 500` would take roughly
+7-15 minutes per run and the iteration count has to come down. **Check first
+whether LULESH's reported elapsed time includes initialisation** — its init
+loops are serial, and at 59 M elements a low iteration count would measure the
+serial init rather than the solver.
+
+## Status of round 3
+
+Regime-limited. The numbers stand; the interpretation does not generalise, and
+the artifact was not given a problem where its claims could apply. A rerun at
+300^3 or 390^3 is the honest test.
