@@ -29,19 +29,58 @@ is the per-rank edge length `-s`.
 
     ~72 B per element   (allElem approximated as numElem + ghosts)
 
-**Total.** With `numNode/numElem = ((nx+1)/nx)^3`, which is 1.030 at `nx = 100`:
+**Total from the two allocators.** With `numNode/numElem = ((nx+1)/nx)^3`, which
+is 1.030 at `nx = 100`:
 
     persistent            164 + 104 x 1.030  =  271 B/element
     persistent + transient                   =  343 B/element
 
-**Validation against measurement.** Round 3 ran 729,000 elements and peaked at
-230 MB, i.e. **315 B/element** — between the persistent floor and the
-all-transients-live ceiling, as it should be, since gradients and strains are
-allocated and released within the step. An independent source count and the one
-measurement we have agree.
+## CORRECTED 2026-08-25 by measurement — job 5343103
 
-**Working coefficient: 315 B/element**, confidence `medium` (one measurement,
-one derivation, agreeing).
+**The derivation above is low by about 2.2x, and the check that appeared to
+confirm it confirmed nothing.**
+
+Measured peak RSS at global 300^3, four configurations:
+
+| config | ranks x threads | path | GB total | **B/element** |
+|---|---|---|---|---|
+| m08x1 | 8 x 1 | MPI-only | 18.6 | **688** |
+| m27x1 | 27 x 1 | MPI-only | 19.4 | **718** |
+| o08x7 | 8 x 7 | threaded | 24.6 | **910** |
+| o27x2 | 27 x 2 | threaded | 25.3 | **938** |
+
+**What the derivation got right.** The threaded-minus-MPI delta is
+**~200-220 B/element**, against a predicted **192 B/element** for one set of
+`fx/fy/fz_elem` arrays. The mechanism is confirmed; the published single-rank
+run at 23.6 GB is 874 B/element and sits in the threaded band, which settles
+that it was an OpenMP configuration.
+
+**What it got wrong.** The absolute count. Counting only `AllocateNodePersistent`
+and `AllocateElemPersistent` misses the rest of the `Domain` — `nodeElemStart`
+and `nodeElemCornerList` alone add 8 x numElem `Index_t` (32 B/element), plus
+comm buffers, symmetry planes, and the `-r 11` region index lists. A full audit
+of the class is still owed; until then the measured figures stand.
+
+**Why the round-3 cross-check was spurious.** 230 MB at 729,000 elements gives
+315 B/element, which fell neatly between the two derived bounds — and that
+agreement was an accident. Round 3 ran **125 ranks of 5,832 elements each**. At
+that size a LULESH process is dominated by binary, MPI runtime and fixed
+allocations, not by anything that scales with element count, so no per-element
+coefficient can be extracted from it in either direction. A number that appeared
+to validate a derivation was measuring something else entirely.
+
+That is the same failure this project keeps meeting: **a plausible number, not an
+error.** It is recorded here rather than quietly fixed, because the pattern is
+more useful than the value.
+
+**Working coefficients, measured:**
+
+    MPI-only      ~700 B/element     confidence `medium` (n=2 configurations)
+    threaded      ~920 B/element     confidence `medium` (n=2 configurations)
+
+**Footprint is config-dependent even though work is fixed.** The decomposition
+does not change the problem; it changes the memory by ~30%. Any claim binding on
+footprint has to be evaluated per configuration, not per application.
 
 ## P3 — Memory traffic
 
@@ -63,12 +102,17 @@ messages. Analytic, evaluable at any size without running there.
 
 ## Choosing the size
 
-**Target.** Jeff places LULESH's transition to memory-bound at ~20 GB RSS. At
-315 B/element that is:
+**Target.** Jeff places LULESH's transition to memory-bound at ~20 GB RSS.
+Global 300^3 = 27e6 elements lands at **18.6-25.3 GB measured**, depending on
+the force path — confirmed on the machine, not extrapolated.
 
-    20e9 / 315  =  63.5e6 elements   ->   400^3 = 64.0e6  =  20.2 GB
+Round 3 ran 729,000 elements, 37x smaller and cache-resident throughout.
 
-Round 3 ran 729,000 elements — **88x too small**, and cache-resident throughout.
+**The size correction achieved what it was for.** At 300^3 the code is visibly
+bandwidth-limited: going from 8 cores to 56 — **7x the cores** — buys **1.69x**,
+a scaling efficiency of 24%, and the 8-core configuration is by far the most
+core-efficient (3,900 core-seconds against 16,300). That is the regime round 3
+assumed and did not have.
 
 **The decomposition constraint is the interesting part.** LULESH requires the
 rank count to be a perfect cube `t^3` (`lulesh-init.cc:685`) and the global edge
