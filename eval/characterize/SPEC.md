@@ -314,19 +314,19 @@ that sits in the noise.
 **1. `properties.json`** -- per (application, size). Machine-independent. The
 portable artefact; this is the thing that gets carried to a new machine.
 
-Shape only. The two footprint figures below are extrapolated from the one
-measurement we have -- round 3's 729,000 elements occupied 230 MB, so ~315 B per
-element -- and are placeholders until the analytic derivation is done against the
-source. `null` marks a property not yet measured; nothing is guessed.
+Shape only. The footprint coefficient is now derived from source and
+cross-validated against measurement -- see `analytic-lulesh.md`. `null` marks a
+property not yet measured; nothing is guessed.
 
 ```json
-{"app":"lulesh","size":{"elements":64000000,"side":400,"ranks":125,"s":80},
+{"app":"lulesh","size":{"elements":27000000,"side":300,"ranks":27,"s":100},
  "work_unit":"element-update",
  "properties":{
-   "footprint":{"per_rank_B":1.6e8,"total_B":2.0e10,"tier":"analytic",
-                "derived_from":"~315 B/element, extrapolated from round 3;
-                                TO BE REDERIVED from src/lulesh-init.cc allocations",
-                "confidence":"low"},
+   "footprint":{"per_rank_B":3.2e8,"total_B":8.5e9,"tier":"analytic",
+                "derived_from":"315 B/element: lulesh.h:164,185 allocations;
+                                agrees with round 3's 230 MB at 729k elements",
+                "conditions":{"path":"MPI-only; the threaded path adds >=192 B/element"},
+                "confidence":"medium"},
    "mem_traffic":{"B_per_W":2048,"tier":"analytic",
                   "derived_from":"src/lulesh.cc:514,736",
                   "conditions":{"omp":"off; the >1-thread path adds ~768 B/W"},
@@ -338,10 +338,14 @@ source. `null` marks a property not yet measured; nothing is guessed.
  "measured_on":"corsys4","scale_down":"rank count reduced, per-rank footprint held"}
 ```
 
-Chosen to land in the regime: 125 ranks x 80^3 puts ~20 GB on the node, which is
-where Jeff places LULESH's transition to memory-bound. 125 = 5^3 and 5 x 80 = 400
-satisfy LULESH's cube constraints. That is job 1 of this suite doing its job --
-round 3's size was two orders of magnitude below it.
+Chosen to land in the regime: the global 300^3 problem is anchored to a published
+LULESH configuration measured at 23.6 GB, and 27 ranks x 100^3 satisfies LULESH's
+cube constraint while fitting one rank per core inside the 56 allocatable. That
+is job 1 of this suite doing its job -- round 3's size was 37x below it.
+
+Note the footprint is config-dependent: the MPI-only path derives to 8.5 GB total
+where the published threaded single-rank run measured 23.6 GB. Fixed work is
+preserved across decompositions; fixed memory is not.
 
 **2. `label.<machine>.json`** -- the join's output. The answer key. **Never shown
 to an arm.** Records which claim produced each class, so a wrong label is
