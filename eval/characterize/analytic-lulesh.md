@@ -82,6 +82,32 @@ more useful than the value.
 does not change the problem; it changes the memory by ~30%. Any claim binding on
 footprint has to be evaluated per configuration, not per application.
 
+## Noise floor — jobs 5343103 and 5343405
+
+Job 5343405 accidentally re-ran the revision-1 script, which makes it a free
+replication: the same four configurations, separate allocations, different
+nodes.
+
+| config | grind 5343103 | grind 5343405 | relative difference |
+|---|---|---|---|
+| m08x1 | 2.9043118 | 2.9075818 | 0.11% |
+| o08x7 | 1.7205662 | 1.7304016 | 0.57% |
+| m27x1 | 8.0046166 | 8.1108764 | 1.32% |
+| o27x2 | 6.0721079 | 6.2279475 | 2.53% |
+
+**Worst-case run-to-run variation is 2.5%**, across allocations and across
+nodes. The configuration spread measured in the same jobs is 1.69x -- a 69%
+effect against a 2.5% floor, roughly **27x the noise**. Configuration
+differences at this problem size are comfortably resolvable, which was not
+knowable from round 3.
+
+Both `rc=1` failures (64 ranks, and 108 threads) reproduced exactly, so they are
+deterministic rejections by the resource manager rather than scheduling flukes.
+
+For comparison, ZeroSum reported 0.13% run-to-run on miniQMC and used that to
+justify n=10. At 2.5% here, resolving a 5% effect needs replication; resolving
+this 69% one does not.
+
 ## P3 — Memory traffic
 
 ~2.0 KB per element-update on the MPI-only path; the `omp_get_max_threads() > 1`
