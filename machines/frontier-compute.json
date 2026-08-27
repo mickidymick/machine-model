@@ -1242,15 +1242,15 @@
       "id": "prgenv-cray-drops-openmp",
       "symptom": "A CMake project builds cleanly under the default environment and runs single-threaded. The timer table looks normal; nothing errors.",
       "cause": "Frontier defaults to PrgEnv-cray. CCE identifies to CMake as \"CrayClang\", which matches a \"Cray\" branch BEFORE any \"Clang\" branch in projects that test in that order. If the project ships no CrayCompilers.cmake, it falls through to a warning and sets no flags at all -- including -fopenmp. Configuration.h then substitutes stub omp_* functions, so every `omp parallel for` and `omp simd` is silently dropped.",
-      "remedy": "module load PrgEnv-gnu, and verify: grep ENABLE_OPENMP build/src/config.h must show 1. Do not trust a clean build.",
-      "sting": "Observed on miniQMC 2026-08-13. The failure costs a factor of the thread count and presents as \"this machine is slow\", not as a build problem."
+      "remedy": "module load PrgEnv-gnu, and verify from the GENERATED CONFIG HEADER that OpenMP is enabled -- the flag the project defines for it will be 1, not absent or 0. Do not trust a clean build, and do not trust the compile line: the flags are dropped silently at configure time, not at compile time.",
+      "sting": "Observed 2026-08-13 on a CMake-based proxy application. The failure costs a factor of the thread count and presents as \"this machine is slow\", not as a build problem."
     },
     {
       "id": "mpi-off-by-default",
       "symptom": "`srun -n16` completes, prints one timer table, and reports a plausible time. Scaling studies show no speedup and no error.",
-      "cause": "Some CMake projects default MPI OFF (miniQMC: SET(QMC_MPI 0 ...)). Without it the binary is serial, so N ranks are N independent copies of the whole problem rather than one N-rank job. Nothing in the output says so unless the code happens to print MPI rank count.",
-      "remedy": "Pass the project's MPI flag explicitly and verify HAVE_MPI in the generated config header. Prefer a benchmark that prints its rank count, and check it.",
-      "sting": "Detected only because miniQMC prints \"MPI processes = N\". A code that does not print it would have produced a full scaling study of nonsense."
+      "cause": "Some CMake projects default MPI OFF and require an explicit flag to enable it. The Cray wrappers link such a build without complaint, so the binary is serial and N ranks are N independent copies of the whole problem rather than one N-rank job. Nothing in the environment or the launch says so; the only signal is whether the code itself prints its rank count.",
+      "remedy": "Pass the project's MPI flag explicitly and verify the MPI symbol in the generated config header. Then verify again at RUNTIME from the application's own output: a benchmark that prints its rank count is worth choosing for that reason alone, and a rank count of 1 under srun -n16 is the whole failure made visible.",
+      "sting": "Caught 2026-08-13 only because the application under test happened to print \"MPI processes = N\". A code that does not print it would have produced a full scaling study of nonsense, every number plausible."
     },
     {
       "id": "cmake-needs-cray-system-name",
