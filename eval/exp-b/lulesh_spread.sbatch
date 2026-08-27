@@ -8,9 +8,15 @@
 # 5349696 gave, for both configurations needing more than 56 CPUs:
 #     srun: error: Unable to create step for job 5349696:
 #           Cannot request more threads per core than the job allocation
-# srun cannot expand an allocation it was not given. This does not change how
-# the <=56 configurations run -- they still bind one task per core -- but it is
-# why m64x1 and o27x4 failed twice.
+# srun cannot expand an allocation it was not given, which is why m64x1 and
+# o27x4 failed twice.
+#
+# REVISION 3 CLAIMED THIS "does not change how the <=56 configurations run".
+# THAT WAS WRONG, ASSERTED WITHOUT TEST, AND JOB 5358788 DISPROVED IT: the same
+# o08x7 configuration ran 116.1 s under the revision-2 allocation and 274.3 s
+# under this one, with 0.3% noise inside each job. Exposing the second hardware
+# thread changes placement for every step that does not explicitly decline it.
+# Each srun now states --threads-per-core for itself; see the sweep loop.
 #SBATCH --threads-per-core=2
 #
 # -o/-e are relative to the SUBMIT directory and Slurm resolves them BEFORE the
@@ -156,10 +162,17 @@ for p in $(seq 1 "$PASSES"); do
     # Above 56 the second hardware thread has to be requested explicitly.
     # --cpu-bind=cores allocates cores, and asking for more than exist is
     # rejected outright rather than downgraded.
+    # The JOB allocates 2 threads per core, because m64x1 and o27x4 cannot run
+    # otherwise. But an allocation that EXPOSES the second hardware thread
+    # changes placement for every step that does not explicitly decline it --
+    # job 5358788 ran o08x7 at 274.3 s where job 5349696 ran the identical
+    # configuration at 116.1 s, with 0.3% noise inside each. srun can request
+    # FEWER threads per core than the allocation, just not more, so every step
+    # now states what it wants instead of inheriting it.
     if [ "$pu" -gt "$CORES" ]; then
       bind=(--threads-per-core=2 --cpu-bind=threads); places=threads; smt=1
     else
-      bind=(--cpu-bind=cores); places=cores; smt=0
+      bind=(--threads-per-core=1 --cpu-bind=cores); places=cores; smt=0
     fi
 
     OMP_NUM_THREADS=$threads \
@@ -244,19 +257,12 @@ if low:
 print(f"\nSPREAD  {spread:.2f}x  ({fast[0]} {fast[1]['med']:.0f}s -> {slow[0]} {slow[1]['med']:.0f}s)"
       f"   worst sd {worst_sd:.1f}%")
 
-# The equal-core pairs: same cores, work moved from ranks to threads. This is
-# the comparison revision 1 could not make.
-print("\nEQUAL-CORE PAIRS -- ranks vs threads at fixed core count")
-for cores, a, b in (("8", "m08x1", "o01x8"), ("27", "m27x1", "o01x27")):
-    if a in summ and b in summ:
-        ra, rb = summ[a]["med"], summ[b]["med"]
-        db = summ[b]["bpe"] - summ[a]["bpe"]
-        print(f"  {cores:>3} cores: {a} {ra:6.1f}s   vs   {b} {rb:6.1f}s"
-              f"   ratio {rb/ra:5.2f}x   footprint +{db:.0f} B/elem")
-    else:
-        print(f"  {cores:>3} cores: incomplete -- one side did not run")
-print("  A ratio near 1.0 says the threaded force path costs little here.")
-print("  Above ~1.2 says it is a real tax, and the node cannot be filled without paying it.")
+# Cross-allocation guard. Same configuration, different allocation, 2.36x
+# apart with sub-1% noise inside each -- so a median is only comparable to
+# medians from the SAME job unless the step flags are known to match.
+print("\nALLOCATION FLAGS ARE PART OF THE CONFIGURATION")
+print("  Every step states --threads-per-core explicitly. Compare these medians")
+print("  only against runs that did the same; job 5358788 and earlier did not.")
 
 print("\nHOW TO READ THIS")
 if spread >= 2.0:
