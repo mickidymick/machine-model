@@ -1,7 +1,20 @@
 #!/bin/bash
 #SBATCH -J exp-b
 #SBATCH -N 1
-#SBATCH -t 00:45:00
+#SBATCH -t 01:00:00
+#
+# --threads-per-core=2 EXPOSES the second hardware thread to the allocation. It
+# does not force anyone to use it: srun can request fewer than the allocation
+# holds, just never more. It is here because the best LULESH configuration
+# measured (64 ranks, 114.6 s, job 5359372) CANNOT BE LAUNCHED without it, and
+# an arm that reasons its way to 64 ranks must be able to run what it chose.
+#
+# It is also a hazard, and arms must be told so in the problem statement. The
+# spread probe measured the SAME configuration at 117.1 s and 274.3 s -- 2.36x
+# -- purely on whether its srun step stated --threads-per-core or inherited it
+# (jobs 5359372 vs 5358788, 0.3% noise inside each). A step that does not state
+# it is not being measured on what it chose. See eval/exp-b/SPREAD-RESULTS.md.
+#SBATCH --threads-per-core=2
 #
 # 45 minutes, not 2 hours. 5 configs x 10 passes x ~34 s measured = ~28 min, and
 # Slurm backfills a short job into gaps a long one cannot fit. Asking for 2 h on
@@ -145,6 +158,20 @@ for p in $(seq 1 "$PASSES"); do
         rc=99
       fi
 
+      # EQUAL-WORK GATE. Set EXPECT_WORK and a run that did a different problem
+      # is marked rather than averaged in. Round 1 was VOIDED because configs
+      # did not match PROBLEM.md and nothing in the harness said so -- the times
+      # were all plausible. A wrong-work run is not a slow run or a fast run; it
+      # is not a run.
+      if [ -n "${EXPECT_WORK:-}" ] && [ "$work" != "NA" ] && [ "$work" != "$EXPECT_WORK" ]; then
+        echo "    !! $name did work=$work, expected $EXPECT_WORK -- NOT COMPARABLE."
+        echo "       This config solved a different problem. Excluded from analysis."
+        rc=98
+      fi
+      if [ -n "${EXPECT_WORK:-}" ] && [ "$work" = "NA" ] && [ "$rc" = "0" ]; then
+        echo "    !! $name reported no work figure, so equal work is UNVERIFIED."
+      fi
+
       printf '%s,%s,%.2f,%s,%s,%s,%s,%s,%s\n' "$p" "$name" "$secs" "$solve" "$fom" "$work" "$ranks" "$thr" "$rc" >> "$CSV"
       printf '    %-14s wall %8.2f s   app %10s s   work=%s ranks=%s thr=%s   exit=%s\n' "$name" "$secs" "$solve" "$work" "$ranks" "$thr" "$rc"
     )
@@ -165,3 +192,17 @@ echo
 echo "Before believing any of it, check the verification columns: a config that"
 echo "did not get its cores, GPUs or huge pages produced a plausible time that"
 echo "means nothing."
+
+if [ -n "${EXPECT_WORK:-}" ]; then
+  bad=$(awk -F, -v w="$EXPECT_WORK" 'NR>1 && $6!="NA" && $6!=w {print $2}' "$CSV" | sort -u)
+  novf=$(awk -F, 'NR>1 && $6=="NA" {print $2}' "$CSV" | sort -u)
+  echo
+  if [ -n "$bad" ]; then
+    echo "!! WRONG WORK -- these configs did not solve the specified problem:"
+    printf '     %s\n' $bad
+    echo "   Exclude them. They are not slow or fast, they are incomparable."
+  else
+    echo "equal-work gate: every config that reported work did $EXPECT_WORK."
+  fi
+  [ -n "$novf" ] && { echo "unverified (no work figure reported):"; printf '     %s\n' $novf; }
+fi

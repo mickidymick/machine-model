@@ -35,6 +35,14 @@ problem and I care only about how long it takes.
 Report the total elapsed time and the "Grind time" figure LULESH prints. Parse
 the full-precision elapsed value, not the two-significant-figure summary line.
 
+**The allocation exposes both hardware threads per core** (`--threads-per-core=2`
+at the job level). Your `srun` step may request either one or two per core --
+fewer than the allocation holds is allowed, more is not. **State what you want
+explicitly.** A step that does not is placed by whatever the allocation happens
+to expose, and the same configuration has been measured 2.36x apart on that
+difference alone. This is part of the configuration, not part of the
+environment.
+
 The mesh is structured and the kernels sweep it in order -- element and node
 arrays are traversed contiguously with regular stencil neighbours. The region
 settings above mean per-element work is not uniform across the mesh.
