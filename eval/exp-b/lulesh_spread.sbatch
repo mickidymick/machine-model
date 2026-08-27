@@ -1,8 +1,17 @@
 #!/bin/bash
 #SBATCH -J lulesh-spread
 #SBATCH -N 1
-#SBATCH -t 02:00:00
+#SBATCH -t 01:00:00
 #SBATCH -p batch
+#
+# --threads-per-core=2 MUST be on the JOB, not just on srun. Without it job
+# 5349696 gave, for both configurations needing more than 56 CPUs:
+#     srun: error: Unable to create step for job 5349696:
+#           Cannot request more threads per core than the job allocation
+# srun cannot expand an allocation it was not given. This does not change how
+# the <=56 configurations run -- they still bind one task per core -- but it is
+# why m64x1 and o27x4 failed twice.
+#SBATCH --threads-per-core=2
 #
 # -o/-e are relative to the SUBMIT directory and Slurm resolves them BEFORE the
 # script runs, so a mkdir inside cannot create them in time. Submit from the
@@ -13,7 +22,7 @@
 # DOES A CONFIGURATION SPREAD EXIST AT THE CORRECTED PROBLEM SIZE?
 #
 #   ./eval/exp-b/build_spread.sh                     # login node, once
-#   PASSES=3 sbatch -A CSC617 eval/exp-b/lulesh_spread.sbatch
+#   PASSES=2 sbatch -A CSC617 eval/exp-b/lulesh_spread.sbatch
 #
 # ---------------------------------------------------------------------------
 # REVISION 2, after job 5343103. Four things that run taught us:
@@ -27,23 +36,25 @@
 #    iterations gives 400.2 s against a reported 4e+02.
 #
 # 2. THE CORE CEILING IS 56, NOT 112. Revision 1 gated on 112 allocatable PUs,
-#    but --cpu-bind=cores allocates CORES, and there are 56. m64x1 (64 ranks)
-#    and o27x4 (108 threads) both died on it. Reaching the second hardware
-#    thread requires --threads-per-core=2 and binding to threads. The gate that
-#    let them through made exactly the error cpu.core_inventory exists to warn
-#    about.
+#    but --cpu-bind=cores allocates CORES, and there are 56. The gate that let
+#    m64x1 and o27x4 through made exactly the error cpu.core_inventory exists to
+#    warn about. Adding --threads-per-core=2 to srun was still not enough -- it
+#    has to be on the JOB; see the directive block above. Fixed in revision 3.
 #
 # 3. THE SPREAD WAS CONFOUNDED. Revision 1 varied core count and force path
-#    together, so its 1.69x was mostly "did you use the whole node" -- the least
-#    interesting lever. This set adds EQUAL-CORE PAIRS: the same number of cores
-#    reached by ranks versus by threads. 1 is a perfect cube, so a single rank
-#    with N threads is a legal LULESH configuration and gives the pure-threaded
-#    end of each pair.
+#    together, so its 1.69x was mostly "did you use the whole node". Revision 2
+#    added equal-core pairs to separate them; they turned out to measure NUMA
+#    placement instead and are retired -- see the note under CONFIGS.
 #
 # 4. RUNS ARE MINUTES, NOT SECONDS. Revision 1 estimated 25 s by scaling round
 #    3's throughput -- which was measured cache-resident, in the regime this
-#    size deliberately leaves. Real runs were 290-490 s. Iterations drop 50 ->
-#    20 (still 1.5x round 3's total work) and the wall goes to two hours.
+#    size deliberately leaves. Real runs were 116-196 s at -i 20.
+#
+# REVISION 3, after job 5349696 completed a full pass. --threads-per-core=2
+# moved to the job; the two single-rank configurations retired; six
+# configurations at ~15 min a pass, PASSES=2 by default, one-hour wall. The
+# 2.5% noise floor measured across jobs 5343103 and 5343405 is what makes two
+# passes sufficient to resolve a 1.69x spread.
 #
 # THE FINDING THIS PROBE IS NOW SHAPED AROUND. LULESH needs a cube rank count;
 # Frontier has 56 usable cores. The cubes are 1, 8, 27, 64 -- so the largest
@@ -58,7 +69,7 @@ cd "$SLURM_SUBMIT_DIR" || exit 1
 D=eval/exp-b
 BIN=$D/bin
 OUT=$D/results
-PASSES=${PASSES:-3}
+PASSES=${PASSES:-2}
 mkdir -p "$OUT"
 
 STAMP=$(date +%Y%m%d_%H%M%S)
@@ -81,19 +92,32 @@ PUS=112               # with the second hardware thread
 # ranks to threads, which is the only way to separate the force-path cost from
 # the how-much-of-the-node-did-you-use effect that dominated revision 1.
 CONFIGS=(
-  # -- 8 cores: decomposition vs threading, equal cores
+  # -- scaling anchor and the largest pure-MPI configuration that fits
   "m08x1:8:150:1:mpi"      # 8 ranks, cheap force path
-  "o01x8:1:300:8:omp"      # 1 rank, 8 threads, threaded force path
-  # -- 27 cores: the largest pure-MPI configuration that fits
   "m27x1:27:100:1:mpi"     # 27 ranks, cheap path, 29 cores idle
-  "o01x27:1:300:27:omp"    # 1 rank, 27 threads, threaded path
   # -- filling the node, which pure MPI cannot do
   "o27x2:27:100:2:omp"     # 54 cores
   "o08x7:8:150:7:omp"      # 56 cores
-  # -- past the core ceiling: requires the second hardware thread
+  # -- past the core ceiling: needs the second hardware thread
   "m64x1:64:75:1:mpi"      # 64 ranks -- what trusting the vendor diagram buys
   "o27x4:27:100:4:omp"     # 108 threads
 )
+#
+# THE SINGLE-RANK CONFIGURATIONS ARE RETIRED, not lost. Measured in job 5349696:
+#
+#   o01x8    1 rank x 8 threads    1148.837 s and 1150.399 s   24.9 GB
+#   o01x27   1 rank x 27 threads    536.031 s                  24.9 GB
+#
+# against m08x1 at 195.978 s and m27x1 at 156.813 s on the same cores -- 5.86x
+# and 3.42x worse. They were added to isolate the threaded force path at fixed
+# core count, and they do not: both hold the entire 24.9 GB in ONE process
+# spanning four NUMA domains, so they measure placement, not the force path.
+# That confound was flagged when they were added and it materialised.
+#
+# The finding stands on its own -- single-rank OpenMP is catastrophic here, and
+# no arm would choose it -- but it cost 70% of each pass to re-measure something
+# already answered. Six configurations at ~15 min a pass fits a one-hour wall;
+# eight did not fit two hours.
 
 # ------------------------------------------------------- pre-flight arithmetic
 fail=0
