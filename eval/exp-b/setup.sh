@@ -56,6 +56,28 @@ for b in $BENCHES; do
   fi
 done
 
+# The PROBLEM statement goes to BOTH arms, so a leak here does not bias
+# treatment against control -- it just removes the lever the experiment exists
+# to measure, symmetrically, and looks fine doing it. Round 4's first batch of
+# six arms was voided this way: problem-lulesh.md carried our own
+# bytes-per-element finding, which is precisely what round 3's control arm had
+# to derive from source. See PROBLEM-PROVENANCE.md.
+#
+# A problem statement may say what the fixed problem is, what the constraints
+# are, and what the environment exposes. It may not carry a number we measured
+# or a path into this repo.
+LEAK='eval/|\.\./|SPREAD-RESULTS|analytic-|COVERAGE\.md|RESULTS\.md|PROVENANCE|registry/|machines/|2\.36x|23\.6 GB|874|bytes-per-element|bytes per element|job [0-9]{6,}'
+for b in $BENCHES; do
+  pf="$HERE/problem-$b.md"
+  [ -r "$pf" ] || continue
+  if grep -qE "$LEAK" "$pf"; then
+    echo "REFUSING: problem-$b.md contains a measurement or repo path." >&2
+    grep -nE "$LEAK" "$pf" | sed 's/^/  /' >&2
+    echo "  Move experimental-design reasoning to PROBLEM-PROVENANCE.md." >&2
+    exit 1
+  fi
+done
+
 fail=0
 for bench in $BENCHES; do
   src="$HERE/pristine-$bench"
