@@ -1268,9 +1268,13 @@
     {
       "id": "hugepages-incompatible-with-prgenv-amd",
       "symptom": "A build that works under PrgEnv-gnu fails to LINK under PrgEnv-amd with \"ld.lld: error: -Ttext-segment is not supported. Use --image-base if you intend to set the base address\". Nothing in the message mentions huge pages.",
-      "cause": "craype-hugepages<N> injects -Wl,-Ttext-segment=0x20000000 into the link line (visible as PE_HUGEPAGES_TEXT_SEGMENT in the wrapper's pkg-config call). -Ttext-segment is a GNU ld option; PrgEnv-amd links with lld, which rejects it. The two modules are mutually exclusive and neither says so.",
-      "remedy": "Use PrgEnv-gnu (or another GNU-ld toolchain) if huge pages are wanted, or drop the hugepages module if PrgEnv-amd is wanted. There is no flag that reconciles them; --image-base is the lld spelling but the module does not emit it.",
-      "sting": "Observed 2026-08-19 building XSBench. Both choices are individually reasonable -- AMD compiler for AMD hardware, huge pages for a TLB-bound kernel -- and only the COMBINATION fails. The error names neither module, so it reads as a source or toolchain problem rather than a module conflict."
+      "cause": "craype-hugepages<N> injects -Wl,-Ttext-segment=0x20000000 into the link line (visible as PE_HUGEPAGES_TEXT_SEGMENT in the wrapper's pkg-config call). -Ttext-segment is a GNU ld option, and PrgEnv-amd links with lld, which rejects it. THE CONFLICT IS WITH THE LINKER, NOT WITH THE COMPILER: any toolchain that links with GNU ld accepts the flag, including PrgEnv-amd once its linker is swapped.",
+      "remedy": "Three routes, all verified 2026-08-27 by building XSBench in a four-cell matrix (eval/exp-b/xsbench_buildmatrix.sh): (1) PrgEnv-gnu with craype-hugepages2M loaded -- builds; (2) PrgEnv-amd with -fuse-ld=bfd, keeping the AMD compiler and swapping only the linker -- builds; (3) drop the hugepages module -- builds, and gives up the pages. Only PrgEnv-amd with its default lld fails. Note that linking is not provisioning: a binary that links does not prove 2 MB pages were obtained at runtime, which still needs the smaps check under mem.page_backing.",
+      "sting": "Observed 2026-08-19 building XSBench. Both choices are individually reasonable -- AMD compiler for AMD hardware, huge pages for a TLB-bound kernel -- and only the COMBINATION fails. The error names neither module, so it reads as a source or toolchain problem rather than a module conflict.",
+      "correction": "Recorded 2026-08-27. The earlier text asserted 'the two modules are mutually exclusive' and 'there is no flag that reconciles them'. Both are false, and the error was consequential: round 3's with-artifact arm switched to PrgEnv-gnu -- which already resolves the conflict -- and THEN also unloaded craype-hugepages2M, echoing the 'mutually exclusive' wording, giving up the 2.4x page-size lever on a code that is nothing but random gathers into a multi-GB grid. The symptom field was right, the cause field was wrong, and the arm's decision traces to the wrong one.",
+      "evidence": [
+        "eval/exp-b/bin/xsbench-matrix/build_A.log through build_D.log"
+      ]
     }
   ],
   "open_questions": [
