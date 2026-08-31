@@ -157,3 +157,88 @@ registry does not carry. Each is a candidate claim:
 - Second draw per arm; every result rests on one stochastic generation.
 - corsys4 conditions retrofit (6 claims flagged). Registry pin 0.1 vs 0.6.
 - Task-scoped renders (`render.py --for <task>`) — the next artifact lever.
+
+---
+
+# 2026-08-31 — pick up here
+
+Everything below supersedes the queue above, which predates the Genesis reframe.
+
+## WHAT CHANGED: Genesis
+
+Genesis (ORNL) funds AI-assisted conversion and optimisation of legacy HPC codes
+on the national machines — five applications in the first sprint, their choice
+undecided and possibly months away. That is this project's question, which makes
+the descriptor the instrument for it rather than a parallel effort.
+
+**Scope cut roughly in half.** Out: the corsys4→Frontier transfer study, the
+sweep comparison, three of the four new claims (TLB reach stays), the property
+set trimmed ten → five. Kept deliberately: the web baseline, replication, and
+the corsys4 two-failure-modes finding even though corsys4 leaves the harness.
+
+**The timeline fix became the design:** develop on the five codes already built,
+hold the Genesis five as the untouched test set.
+
+## DONE SINCE 08-20
+
+- **`eval/characterize/SPEC.md`** rewritten — transferable properties, the join
+  via `measured_under` matching.
+- **`COVERAGE.md`** — five apps × twenty claims. Two claims have apps on
+  opposite sides (`smt_benefit`, `page_size_penalty` for XSBench vs LULESH);
+  three claims bind for nothing because everything is single-node and nothing
+  writes data.
+- **LULESH resized** to global 300³ = 27e6 elements, anchored to a published
+  23.6 GB run. `analytic-lulesh.md` has the derivation and its correction.
+- **Spread probe, four revisions, closed.** `SPREAD-RESULTS.md`. Verdict:
+  proceed. 1.72× spread, 1.3% within-job noise, 64 ranks fastest, SMT 4% faster
+  where `cpu.smt_benefit` predicts −5%.
+- **XSBench build unblocked** — the conflict is craype-hugepages vs *lld*, not
+  vs PrgEnv-amd. Three routes work, including `-fuse-ld=bfd`. The artifact's
+  pitfall said no flag reconciles them; it was wrong and an arm acted on it.
+- **Two contamination leaks found and gated.** `tools/leakcheck.py`; `setup.sh`
+  refuses to build leaked arms. Round-4 batch 1 voided.
+- **Round-4 batch 2 collected**: six configs and twelve transcripts archived in
+  `arms-r4/batch2*`. Manipulation verified — MACHINE.md engagement 34/43/26 in
+  treatment, 0/0/0 in control.
+
+## THE STATE OF ROUND 4
+
+**Five of six arms chose the identical configuration** — 8 ranks × 150³, 7
+threads, `--threads-per-core=1`. Only B1 differs: 8 × 14 with SMT, reasoning
+correctly from the artifact's latency-vs-throughput rule.
+
+So the A/B contrast is nearly degenerate. Report **B1 against the pooled other
+five**, not A-mean vs B-mean. The five identical configs are a free within-
+harness noise floor and a side-test of whether `--cpu-bind` flavour and
+distribution matter.
+
+Batch 1 (voided) showed the complement: B3 read the *same* SMT rule and
+*declined* SMT, classifying the kernel as bandwidth-bound where B1 called it
+FP-latency-bound. **Same artifact, same correct sentence, opposite decisions** —
+because the rule needs a regime classification the arm must make itself. That is
+the thesis inside a single claim.
+
+## NEXT, in order
+
+1. **Collect batch 2 into `configs/lulesh/`** and create matching
+   `arms/<name>/lulesh` trees (build_all.sh keys off the config name).
+   `configs/lulesh/` is empty; round 3's five are archived in `lulesh-r3/`.
+2. **Run it.** `BENCH=lulesh PASSES=3 EXPECT_WORK=27000000 sbatch -t 02:00:00`.
+   Note `-i 50` in the spec vs `-i 20` in the probe — wall clock is ~2.5× the
+   probe's; grind transfers, seconds do not.
+3. **XSBench.** This is the discriminating test and LULESH is not — `COVERAGE.md`
+   scores `page_size_penalty` `+++` for XSBench and `--` for LULESH, and five of
+   six LULESH arms converging is that prediction coming true.
+4. **Preregistration** before the XSBench sessions, not after.
+
+## STILL OPEN
+
+- Whether bare `srun -n 64 -c 1` fails under a default allocation. The
+  "core_inventory unlocks the best configuration" claim rests on it. Two minutes.
+- `problem-lulesh.md` says the size is "given below" but setup.sh writes it to a
+  separate PROBLEM.md — no arm has been bitten yet, but fix the wording.
+- Three claims bind for nothing (NIC, both storage). One multi-node AMG config
+  fixes the first; the storage gap should be reported, not manufactured away.
+- corsys4 conditions retrofit; registry pin 0.1 vs 0.6.
+- `cpu.system_interference` untested; QMCPACK still named in the briefing, so it
+  is burned as a test application until generalised.
