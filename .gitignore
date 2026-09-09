@@ -1,6 +1,6 @@
-# Runtime droppings from site/serve.py
-site/server.pid
-site/server.log
+# Runtime droppings from webpages/serve.py
+webpages/server.pid
+webpages/server.log
 
 # Stale renderer traceback; regenerate by redirecting stderr if needed
 render.err
