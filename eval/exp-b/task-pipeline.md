@@ -33,9 +33,11 @@ behaves on this hardware.
 ### Phase 1 — tell me what to run
 
 Write **`PHASE1.sh`**, same dispatch convention, with a `build()` and a `run()`.
-Its `run()` must launch the application under the profiler I have provided:
+Its `run()` must launch the application under the profiler I have provided.
+The wrapper goes INSIDE the srun step, as the thing srun launches — it has to
+run on the compute node, once per rank:
 
-    profile_wrap.sh -- <your srun line> <the application and its arguments>
+    srun <your flags> profile_wrap.sh <the application and its arguments>
 
 `profile_wrap.sh` is on the machine and collects a fixed set of measurements:
 
@@ -45,7 +47,10 @@ Its `run()` must launch the application under the profiler I have provided:
 - fills from DRAM, split by whether the memory was local to the NUMA node or
   remote, hence memory traffic in bytes and the fraction that crossed a domain
 
-It writes `profile.json`. I will hand that file back to you.
+Each rank writes a fragment and I combine them into `profile.json`, which I
+will hand back to you. It carries raw counts as well as derived values, plus a
+block of consistency checks — if those fail I will tell you rather than hand you
+numbers I do not trust.
 
 **Two things about phase 1 that matter:**
 
