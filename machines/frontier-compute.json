@@ -1209,7 +1209,8 @@
         "page_backing_confirmed": "smaps_rollup AnonHugePages=0, Private_Hugetlb=0 -- 4K on both nodes",
         "job2": "5498974, 2026-09-17, 1 node, frontier09053 -- AMD-specific routes",
         "nodes_sampled": "frontier07853, frontier09053, frontier01838, plus login03",
-        "job3": "5499095, 2026-09-17, frontier01838 -- PAPI native and perftools"
+        "job3": "5499095, 2026-09-17, frontier01838 -- PAPI native and perftools",
+        "job4": "5499126, 2026-09-17, frontier08571 -- PAPI fill-source counters read"
       },
       "measured": {
         "available": {
@@ -1227,28 +1228,32 @@
           "amd_l3": "PMU present in /sys/bus/event_source/devices and in the PMU list, but perf list advertises no named events for it. Raw encodings untried.",
           "ibs_op / ibs_fetch": "PMU present in sysfs, perf returns <not supported> -- REFUSED BY POLICY, not absent. Distinct from the Intel-machine case where the PMU does not exist."
         },
-        "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance. Second finding, 2026-09-17: what perf ENUMERATES and what a user can READ are different sets in both directions -- amd_df DRAM events are advertised and unreadable, while the Zen fill-source events are readable in principle and not advertised. An availability list is not a capability.",
+        "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance. Second finding, 2026-09-17: what perf ENUMERATES and what a user can READ are different sets in both directions -- amd_df DRAM events are advertised and unreadable, while the Zen fill-source events are readable in principle and not advertised. An availability list is not a capability. RESOLVED 2026-09-17: the divergence runs the other way too, and in our favour. perf's table lacks the fill-source events entirely, while PAPI's native catalogue has them AND they read. So 'what a user can measure here' is not a property of any single tool's event list -- three tools disagreed about the same hardware, and only reading settled it.",
         "other_routes": {
           "PAPI": "present, 27 events. PAPI_TOT_INS / PAPI_TOT_CYC / PAPI_TLB_DM yes; PAPI_L3_TCM no.",
           "cray_perftools": "pat_run is PRESENT and runnable; the first attempt failed on our own bad flag (-o is not a pat_run option) and the log read like a refusal. Corrected to `pat_run -- <exe>`. Its -E option names events explicitly, which is a second route to the DRAM counters. Still unproven.",
           "rocprof": "absent from the default environment (needs module load rocm)"
         },
         "papi_native": {
-          "status": "THE ROUTE TO PER-PROCESS DRAM TRAFFIC, pending a read",
-          "found": "papi_native_avail lists DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM and ANY_DATA_CACHE_FILLS_FROM_SYSTEM, with umasks separating 'Fill from DRAM or IO connected in same node' from 'different node'.",
-          "why_it_matters": "These are the Zen fill-by-data-source events perf's event table does not name. They are CORE events, so paranoid=1 should permit them, and fills x 64 B is DRAM traffic attributable to THIS PROCESS -- better for profiling than the socket-wide Data Fabric counter, which counts every other job on the node too. The local/remote split additionally measures NUMA traffic directly.",
-          "not_yet_read": "This is an ENUMERATION, the same kind of evidence as perf list, which advertised amd_df events that all return <not supported>. A libpapi-linked probe is required before any of this counts as available."
+          "status": "READ AND VERIFIED 2026-09-17, job 5499126 on frontier08571. Per-process DRAM traffic IS obtainable on Frontier.",
+          "events": "DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM and ANY_DATA_CACHE_FILLS_FROM_SYSTEM, umasks :MEM_IO_LCL (DRAM in the same NUMA node) and :MEM_IO_RMT (a different node). The umask is REQUIRED -- the bare name returns 'Not supported by component'.",
+          "verification": "40e6 dependent hops over a 512 MiB random cycle. Predicted before reading: fills ~= hops in the large arm, ~0 in a cache-resident arm. Measured 37,754,890 local-DRAM fills = 94.4% of hops (the ~6% shortfall is hops that hit in cache where the cycle revisits a recent line), and 9 fills on the 64 KiB arm. Both predictions were stated in advance.",
+          "ceiling_check": "Implied read bandwidth 593.5 MB/s, 1.3% of the 44521 MB/s measured peak. A dependent chase is LATENCY bound, so a figure near peak would have meant the counter was not counting what its name says. It is not near peak.",
+          "independent_corroboration": "The instrumented chase measured 101.8 ns/hop. numa.distance_matrix records local latency at 101.5 ns from a completely separate tool (bin/ptrchase). 0.3% apart -- the new instrument reproduces the existing characterization, which supports both.",
+          "numa_traffic": "MEM_IO_RMT returned 37 and 79 fills, i.e. ~0, correct for a single process on first-touch local memory. For a real application the LCL/RMT split is measured PER-PROCESS NUMA-crossing traffic -- a quantity no existing probe in this project produces, and the Data Fabric counters could not have given it even if readable, being socket-wide.",
+          "cost": "perf's event table never named these events; PAPI's native catalogue did. papi_native_avail -e reports 'could not be found' for a name its own listing prints, so the spelling has to be grepped out of the listing."
         }
       },
-      "not_measured": "DRAM traffic is NOT established as unobtainable -- two concrete routes are now identified and unread: (1) PAPI native DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM via a libpapi-linked probe, which is the next build; (2) pat_run -E with explicit events. Raw event encodings remain deliberately unattempted: guessing an event code yields a plausible number counting the wrong thing, this probe's own repeated failure mode. Also unmeasured: the cause of the login-node dTLB anomaly, and whether ic_dc_miss_in_l2 holds its ratio beyond the two nodes sampled.",
+      "not_measured": "Whether pat_run / perftools-lite-hbm reaches the Data Fabric counters -- untried, and now lower value, since per-process fill counting is the better instrument for profiling (the DF counters are socket-wide and would include every other job on the node). Note module papi and module perftools CONFLICT -- Lmod swaps one for the other -- so that attempt needs papi unloaded. Also unmeasured: the cause of the login-node dTLB anomaly; whether ic_dc_miss_in_l2 and the fill counters hold across more than the four nodes sampled; and IBS, which is present in sysfs and refused by policy.",
       "mechanism": "perf_event_paranoid gates system-wide collection, and an uncore PMU has no per-process mode -- a DRAM controller counts for the whole socket regardless of who asks. So core events survive the restriction and uncore events cannot, independently of whether the kernel enumerates them. `perf list` reports what the kernel knows how to encode, never what this user may read, and the two are not the same set.",
       "consequence": "An application-profiling campaign designed from `perf list` would budget for DRAM bandwidth it cannot obtain, and -- on a login node -- would collect TLB numbers that look reasonable and measure nothing.",
-      "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled. Extended 2026-09-17 after testing the AMD-specific paths: three of the four levers the closed-loop design needs are instrumentable today -- TLB miss rate (page-size penalty), IPC (SMT), and message sizes (host/device, no counters needed). Only cost.loaded_latency_knee is blocked, because it needs achieved DRAM bandwidth against the measured peak and no route to DRAM traffic has yet been demonstrated.",
+      "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled. Extended 2026-09-17 after testing the AMD-specific paths: three of the four levers the closed-loop design needs are instrumentable today -- TLB miss rate (page-size penalty), IPC (SMT), and message sizes (host/device, no counters needed). Only cost.loaded_latency_knee is blocked, because it needs achieved DRAM bandwidth against the measured peak and no route to DRAM traffic has yet been demonstrated. RESOLVED 2026-09-17: all four levers the closed-loop design needs are now instrumentable on Frontier -- footprint (no counters), IPC (core counters), TLB miss rate (dTLB-load-misses), and achieved DRAM bandwidth (PAPI fill-source counters). The loaded-latency knee is no longer an instrumentation gap.",
       "evidence": [
         "results-frontier/counters_compute_5498474.txt",
         "scripts/21_counter_capability.sh",
         "results-frontier/counters_amd_routes.txt",
-        "results-frontier/counters_tier3.txt"
+        "results-frontier/counters_tier3.txt",
+        "results-frontier/papi_large.txt"
       ]
     }
   ],
