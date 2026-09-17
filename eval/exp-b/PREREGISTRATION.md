@@ -541,3 +541,115 @@ and effort recorded before the runs, separate scratch directories, equal-work
 gate (`-p 500000 -l 34 -m history -s large -G unionized`), interleaved passes in
 one allocation, Welch t-test, `collect.py` reports NULL rather than a small win
 when the gap sits inside the spread. Arm key: `ARM-KEY-xsbench.md`.
+
+## The four-condition design: a pipeline, not a document (2026-09-17, before any session)
+
+Written after establishing on the machine that the application-side magnitudes
+are measurable (`obs.counter_access`, jobs 5498474/5498974/5499095/5499126), and
+before any session under the new design.
+
+### What changed, and why the arms are no longer one file apart
+
+Experiment B compared two arms differing by exactly `MACHINE.md`. That answered
+"is this document worth having". The question now is whether a **pipeline** —
+artifact plus a measurement of the application plus a prompt built to use both —
+beats what a domain scientist does today, which is to hand an LLM the source and
+ask how to run it.
+
+So the arms differ in more than one file, deliberately. Two consequences follow
+and both are accepted rather than worked around:
+
+- **`MACHINE.md` stays a static empirical object.** No workflow instructions go
+  into it. A machine descriptor that tells you how to use it has stopped being a
+  description of the machine, and it would not port to the next system.
+- **The naive arm is not helped.** It is the baseline precisely because it is
+  what people do. Levelling it up would measure something nobody does.
+
+`task.md` is therefore UNCHANGED and remains the naive prompt. `task-pipeline.md`
+is new. Round 4's six arms were generated against `task.md` and remain valid.
+
+### The four conditions
+
+| # | prompt | artifact | profile | what it is |
+|---|---|---|---|---|
+| 1 | naive | no | no | current practice |
+| 2 | naive | yes | no | **already generated: round 4, unrun** |
+| 3 | pipeline | yes | yes | the full system |
+| 4 | pipeline | no | yes | isolates prompt+loop from the artifact |
+
+1 vs 3 is the headline. 2 and 4 are what make the result attributable, and
+without them the reviewer's question — "is this just better prompting?" — has no
+answer.
+
+### THE PREDICTION: the curve is NOT monotone
+
+**Condition 2 is predicted to fall BELOW condition 1.**
+
+This is not a hunch. Round 3 measured it: the artifact arm lost by 102% with
+every fact correct and every application of those facts correct, because
+supplying a rich machine description moved where the model spent its reasoning.
+Condition 2 is that same configuration.
+
+    1  naive, no artifact              baseline
+    2  naive + artifact                DIPS BELOW baseline
+    3  pipeline + artifact + profile   rises above both
+    4  pipeline + profile, no artifact between 1 and 3
+
+**A monotone rising result would be the weaker outcome**, because "more
+information helps" is what everyone already assumes. A dip followed by a rise
+says machine data alone displaces reasoning and costs you, that joining it to
+the application's own magnitudes is what pays, and that the join is the
+mechanism. That is the interaction the 2026-08-20 scope decisions predicted from
+intuition, now with a measured mechanism behind it.
+
+**Honest limits on the dip, recorded now:** round 3 was ONE draw, at 230 MB on a
+512 GB node, in a regime where almost no claim could bind. The direction is
+evidence; the magnitude is not. Round 4 is the clean version and has not run.
+
+### What each outcome means
+
+- **2 dips, 3 rises.** The predicted result and the strongest available. Report
+  the shape, not just the endpoint.
+- **2 does not dip; 3 still rises.** The displacement effect was an artifact of
+  round 3's bad problem size. The project loses its most distinctive finding and
+  gains a plainer one: the profile is what the descriptor was missing.
+- **3 does not beat 1.** The pipeline does not pay. Then condition 4 decides
+  whether the profile is worthless here or whether the artifact is actively
+  cancelling its benefit — and the second would be the more interesting paper.
+- **4 ≈ 3.** The artifact contributes nothing beyond the profile, and the honest
+  headline is that measuring the application is the lever. This is the outcome
+  that would most change the project, and it is the one to watch for.
+
+### Decisions taken now, so they are not taken after seeing data
+
+- **The profile is FIXED, not chosen by the arm.** `profile_wrap.sh` collects
+  the same five quantities for everyone. Letting arms choose would make the
+  profile a mediator and tangle "helped it configure" with "helped it ask",
+  which cannot be separated at this sample size. The arm still writes the
+  `srun` line, which is a real skill and is scored.
+- **Five quantities, five counters.** The EPYC 7A53 exposes exactly five
+  programmable counters. Adding a sixth event forces PAPI to multiplex, and a
+  multiplexed count is an extrapolation, which would break the known-answer
+  checks the profile relies on. The instrument list is full, not a preference.
+- **Phase 1 is a measurement, not a trial**, and the task says so. An arm that
+  uses it to time a candidate configuration has run a two-point sweep, which is
+  the thing the pipeline claims to avoid.
+- **Runs consumed is reported per condition.** Conditions 3 and 4 spend two runs;
+  a combinatorial sweep spends one per configuration. That is the O(1) versus
+  O(configs) claim stated as a number.
+- **A phase-1 command that fails to launch is an outcome, not a re-roll.** It is
+  recorded in its own category and that arm proceeds without a profile. Same
+  policy as the XSBench build failure.
+- **Draws: 8 per condition, not 3.** Decision-level outcomes are binary and at
+  n=3 perfect separation is only p=0.10 by Fisher's exact. Sessions cost no
+  machine time; the timing runs are the expensive part and are unaffected.
+
+### Falsifiers for the design itself
+
+- **No arm in condition 3 asks anything useful of phase 1** — the pipeline
+  prompt did not produce the behaviour it was built for, and the fault is the
+  prompt rather than the model.
+- **The profile numbers do not vary across applications** in ways that would
+  change a decision, making the whole measurement decorative.
+- **Conditions 1 and 3 land inside the run-to-run spread.** `collect.py` reports
+  NULL rather than a small win when that happens, and that guard stays.
