@@ -1206,33 +1206,41 @@
         "login_node": "login03, same day",
         "privilege": "normal user",
         "workload": "64 KB TLB-resident buffer vs 512 MB random dependent chase, 40e6 dependent loads each",
-        "page_backing_confirmed": "smaps_rollup AnonHugePages=0, Private_Hugetlb=0 -- 4K on both nodes"
+        "page_backing_confirmed": "smaps_rollup AnonHugePages=0, Private_Hugetlb=0 -- 4K on both nodes",
+        "job2": "5498974, 2026-09-17, 1 node, frontier09053 -- AMD-specific routes",
+        "nodes_sampled": "frontier07853 and frontier09053, plus login03"
       },
       "measured": {
         "available": {
           "instructions": "live",
           "cycles": "live -- so IPC is obtainable",
-          "dTLB-load-misses": "live on COMPUTE, 24010x between the two arms on confirmed 4K backing"
+          "dTLB-load-misses": "live on COMPUTE, 24010x between the two arms on confirmed 4K backing",
+          "l2_cache_req_stat.ic_dc_miss_in_l2": "live, 1174x between the two arms. An L2 MISS counter -- L2 misses reach L3, so this is memory-hierarchy pressure, NOT an L3-miss count and NOT DRAM traffic.",
+          "internal_control": "The instruction-cache variants of the same event family barely move (ic_fill_hit_x 0.85x, ic_fill_hit_s 7.7x) while the data-side miss event moves 1174x. Both arms execute identical code, so an i-cache event SHOULD be flat. That is an unplanned control confirming the family counts what it names."
         },
         "unavailable": {
           "LLC-load-misses": "<not supported> via perf, and PAPI_L3_TCM reports No -- no cache-miss route at all",
           "ls_tablewalker.dside": "<not supported> on COMPUTE (it does return counts on the login node)",
-          "uncore/DRAM": "every advertised amd_df event returns <not supported>; uncore PMUs need system-wide access, withheld at paranoid>=1"
+          "uncore/DRAM": "every advertised amd_df event returns <not supported>; uncore PMUs need system-wide access, withheld at paranoid>=1",
+          "ls_any_fills_from_sys / ls_dmnd_fills_from_sys": "NOT NAMED in this perf build's event table -- absent from the catalogue rather than refused. These are the Zen fill-by-data-source events that would give per-process DRAM traffic. Their absence is a perf event-JSON gap, not a policy decision, so PAPI native or raw encodings may still reach them.",
+          "amd_l3": "PMU present in /sys/bus/event_source/devices and in the PMU list, but perf list advertises no named events for it. Raw encodings untried.",
+          "ibs_op / ibs_fetch": "PMU present in sysfs, perf returns <not supported> -- REFUSED BY POLICY, not absent. Distinct from the Intel-machine case where the PMU does not exist."
         },
-        "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance.",
+        "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance. Second finding, 2026-09-17: what perf ENUMERATES and what a user can READ are different sets in both directions -- amd_df DRAM events are advertised and unreadable, while the Zen fill-source events are readable in principle and not advertised. An availability list is not a capability.",
         "other_routes": {
           "PAPI": "present, 27 events. PAPI_TOT_INS / PAPI_TOT_CYC / PAPI_TLB_DM yes; PAPI_L3_TCM no.",
           "cray_perftools": "full stack installed, perftools-base/24.11.0 loaded by default, plus perftools-lite{,-events,-loops,-hbm,-gpu} and perftools-preload. The remaining route to DRAM bandwidth.",
           "rocprof": "absent from the default environment (needs module load rocm)"
         }
       },
-      "not_measured": "Whether Cray perftools / pat_run reaches the Data Fabric counters that perf cannot -- untried. Whether the login-node dTLB anomaly is event multiplexing, PMU virtualisation or contention from other users -- the cause was not diagnosed, only the symptom established. Only one compute node sampled.",
+      "not_measured": "Three routes to DRAM traffic remain untried, and the claim must not be read as 'DRAM bandwidth is unobtainable here': (1) PAPI NATIVE events -- the 27 figure is PRESETS, a curated subset; the native catalogue is the raw PMU list and is where fill-source events would appear. Reading one needs a libpapi-linked probe. (2) Cray perftools pat_run / perftools-lite-hbm -- vendor-supported, installed, loaded by default, and independent of perf's event table. (3) raw event encodings for amd_l3 and for family-19h fill-source events -- deliberately NOT attempted, because guessing an event code yields a plausible number that counts the wrong thing, which is this probe's own established failure mode. Also unmeasured: the cause of the login-node dTLB anomaly, and whether the L2-miss event's ratio is stable across nodes.",
       "mechanism": "perf_event_paranoid gates system-wide collection, and an uncore PMU has no per-process mode -- a DRAM controller counts for the whole socket regardless of who asks. So core events survive the restriction and uncore events cannot, independently of whether the kernel enumerates them. `perf list` reports what the kernel knows how to encode, never what this user may read, and the two are not the same set.",
       "consequence": "An application-profiling campaign designed from `perf list` would budget for DRAM bandwidth it cannot obtain, and -- on a login node -- would collect TLB numbers that look reasonable and measure nothing.",
-      "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled.",
+      "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled. Extended 2026-09-17 after testing the AMD-specific paths: three of the four levers the closed-loop design needs are instrumentable today -- TLB miss rate (page-size penalty), IPC (SMT), and message sizes (host/device, no counters needed). Only cost.loaded_latency_knee is blocked, because it needs achieved DRAM bandwidth against the measured peak and no route to DRAM traffic has yet been demonstrated.",
       "evidence": [
         "results-frontier/counters_compute_5498474.txt",
-        "scripts/21_counter_capability.sh"
+        "scripts/21_counter_capability.sh",
+        "results-frontier/counters_amd_routes.txt"
       ]
     }
   ],
