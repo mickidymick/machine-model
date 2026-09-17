@@ -1178,6 +1178,62 @@
         "results-frontier/stor_5307805_*/storage.csv",
         "results-frontier/stor_5307805_*/declared_layout.txt"
       ]
+    },
+    {
+      "claim": "obs.counter_access",
+      "verdict": "misleading",
+      "probe_validated": "yes",
+      "confidence": "high",
+      "declared": {
+        "source": "perf_event_paranoid, /sys/bus/event_source/devices, `perf list`",
+        "paranoid_login": 2,
+        "paranoid_compute": 1,
+        "pmus_compute": [
+          "cpu",
+          "amd_df",
+          "amd_l3",
+          "amd_iommu_0..11",
+          "ibs_fetch",
+          "ibs_op",
+          "msr",
+          "power"
+        ],
+        "advertised_dram_events": "amd_df/local_processor_read_data_beats_cs0../cs11 on the compute node; amd_df/dram_channel_data_controller_0../7 on the login node",
+        "implication": "`perf list` enumerates DRAM and TLB events, and paranoid=1 reads as 'per-process counters permitted', so the tooling presents a full counter surface."
+      },
+      "measured_under": {
+        "job": "5498474, 2026-09-17, 1 node, frontier07853",
+        "login_node": "login03, same day",
+        "privilege": "normal user",
+        "workload": "64 KB TLB-resident buffer vs 512 MB random dependent chase, 40e6 dependent loads each",
+        "page_backing_confirmed": "smaps_rollup AnonHugePages=0, Private_Hugetlb=0 -- 4K on both nodes"
+      },
+      "measured": {
+        "available": {
+          "instructions": "live",
+          "cycles": "live -- so IPC is obtainable",
+          "dTLB-load-misses": "live on COMPUTE, 24010x between the two arms on confirmed 4K backing"
+        },
+        "unavailable": {
+          "LLC-load-misses": "<not supported> via perf, and PAPI_L3_TCM reports No -- no cache-miss route at all",
+          "ls_tablewalker.dside": "<not supported> on COMPUTE (it does return counts on the login node)",
+          "uncore/DRAM": "every advertised amd_df event returns <not supported>; uncore PMUs need system-wide access, withheld at paranoid>=1"
+        },
+        "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance.",
+        "other_routes": {
+          "PAPI": "present, 27 events. PAPI_TOT_INS / PAPI_TOT_CYC / PAPI_TLB_DM yes; PAPI_L3_TCM no.",
+          "cray_perftools": "full stack installed, perftools-base/24.11.0 loaded by default, plus perftools-lite{,-events,-loops,-hbm,-gpu} and perftools-preload. The remaining route to DRAM bandwidth.",
+          "rocprof": "absent from the default environment (needs module load rocm)"
+        }
+      },
+      "not_measured": "Whether Cray perftools / pat_run reaches the Data Fabric counters that perf cannot -- untried. Whether the login-node dTLB anomaly is event multiplexing, PMU virtualisation or contention from other users -- the cause was not diagnosed, only the symptom established. Only one compute node sampled.",
+      "mechanism": "perf_event_paranoid gates system-wide collection, and an uncore PMU has no per-process mode -- a DRAM controller counts for the whole socket regardless of who asks. So core events survive the restriction and uncore events cannot, independently of whether the kernel enumerates them. `perf list` reports what the kernel knows how to encode, never what this user may read, and the two are not the same set.",
+      "consequence": "An application-profiling campaign designed from `perf list` would budget for DRAM bandwidth it cannot obtain, and -- on a login node -- would collect TLB numbers that look reasonable and measure nothing.",
+      "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled.",
+      "evidence": [
+        "results-frontier/counters_compute_5498474.txt",
+        "scripts/21_counter_capability.sh"
+      ]
     }
   ],
   "flagged": [
@@ -1275,6 +1331,16 @@
       "correction": "Recorded 2026-08-27. The earlier text asserted 'the two modules are mutually exclusive' and 'there is no flag that reconciles them'. Both are false, and the error was consequential: an arm that switched to PrgEnv-gnu -- which already resolves the conflict -- ALSO unloaded the hugepages module, echoing the 'mutually exclusive' wording, and gave up the page-size lever it could have kept. The symptom field was right, the cause field was wrong, and the decision traced to the wrong one.",
       "evidence": [
         "eval/exp-b/bin/xsbench-matrix/build_A.log through build_D.log"
+      ]
+    },
+    {
+      "id": "perf-stat-exits-zero-on-unsupported-event",
+      "symptom": "A capability check that runs `perf stat -e <event> true` and tests the exit code reports every event as available, including ones the kernel refuses.",
+      "cause": "perf stat exits 0 when an event is not supported or is blocked by policy. The refusal appears only in the output, and in CSV mode the VALUE field carries the literal string `<not supported>` where a number would be -- so a naive parse turns a refusal into a datum.",
+      "remedy": "Test the returned value, not the exit status, and reject `<not supported>` / `<not counted>` explicitly. Then read every event under two workloads with opposite expected behaviour and keep it only if the count moves in the predicted direction.",
+      "sting": "Both failure modes are silent and both produce a plausible artifact rather than an error -- an available-events list that is too long, or a counter value that is merely wrong. Observed 2026-09-17 in our own capability probe, twice, before it was pointed at the machine.",
+      "evidence": [
+        "scripts/21_counter_capability.sh"
       ]
     }
   ],

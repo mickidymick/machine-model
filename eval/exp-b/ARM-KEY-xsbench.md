@@ -26,6 +26,15 @@ Source: `eval/exp-b/arms/{no-artifact,with-artifact}/xsbench`, built by
   string `xsbench` **zero** times.
 - `problem-xsbench.md` — clean against setup.sh's measurement/repo-path regex.
 - Briefing is `prompts/frontier-compute.md`, 714 lines, registry v0.6.
+- **The briefing is DELIBERATELY PINNED at that render.** On 2026-09-17 the
+  artifact gained `obs.counter_access` and a `perf-stat-exits-zero` pitfall
+  (registry v0.7); re-rendering would take the treatment arm's document from
+  714 to 1057 lines, a 48% growth, for a claim that has no bearing on an
+  XSBench configuration decision. The attention finding says the volume of
+  reading is itself a cost, so growing the document immediately before a round
+  would confound it. Re-render deliberately after this round, or when building
+  the closed-loop round where counter access is what the arm acts on.
+  The arms as built match the pinned briefing; `setup.sh` re-asserted it.
 - Round-3 XSBench configs archived to `configs/xsbench-r3/` so they cannot run
   alongside this round. `configs/xsbench/` is empty.
 

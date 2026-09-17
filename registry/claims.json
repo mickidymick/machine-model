@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.6",
+  "registry_version": "0.7",
   "purpose": "Portable claim registry. Each entry names one fact a user needs before placing work, what declares it, which probe can falsify it, and how to read the verdict. The registry is machine-independent -- it moves to a new system unchanged. The numbers live in machines/<name>.json, keyed by claim id.",
   "verdicts": {
     "confirmed": "The declared value survived a probe that could have falsified it. As valuable as a contradiction -- confirmations are the control.",
@@ -549,6 +549,25 @@
       "verdict_rule": "confirmed where a declared boundary produces an observable step; misleading where it does not, since the layout then describes something a user cannot act on.",
       "consequence_if_wrong": "Bulk output written to the wrong tier, or effort spent tuning a stripe count that does nothing.",
       "portability": "Universal in shape; the specific thresholds are per-filesystem."
+    },
+    {
+      "id": "obs.counter_access",
+      "domain": "obs",
+      "declares": "Which hardware performance counters a normal user can actually read on a compute node, and whether an event the tooling advertises can in fact be counted.",
+      "declared_source": "perf_event_paranoid, the PMU list under /sys/bus/event_source/devices, and `perf list` -- which enumerates events the kernel knows about, not events this user may read.",
+      "why_it_matters": "Any attempt to characterise an APPLICATION rather than the machine needs counters: footprint, IPC (whether a second hardware thread has idle issue slots to fill), TLB miss rate, achieved bandwidth against the measured peak. No facility document states which of these a user can obtain, and the answer differs between login and compute nodes on the same system.",
+      "probe": {
+        "id": "counter-capability",
+        "tool": "scripts/21_counter_capability.sh",
+        "rationale": "Every event is read under TWO workloads with opposite expected behaviour -- a TLB-resident 64 KB buffer and a 512 MB random dependent chase -- and reported live only if the count moves in the predicted direction. A counter that is not counting returns zero, <not supported>, or a plausible number that does not discriminate; all three otherwise look like success. The page backing of the large buffer is confirmed from smaps in the same run, because huge pages would compress the expected ratio and mimic a dead counter.",
+        "conditions": {
+          "nodes": "login AND compute -- they run different images and need not agree",
+          "privilege": "normal user, no CAP_PERFMON, no sysadmin assistance"
+        }
+      },
+      "verdict_rule": "misleading if the tooling advertises events that cannot be read, or if a readable event returns a plausible number without discriminating. undeclared if nothing states the policy at all. confirmed if what is advertised is what can be read.",
+      "consequence_if_wrong": "An application-characterisation campaign is designed around counters that turn out to be unreadable, or -- worse -- is run against an event that reports numbers while measuring nothing, and the resulting profile is confidently wrong.",
+      "portability": "Universal. Every system has a counter-access policy and almost none document it."
     }
   ]
 }
