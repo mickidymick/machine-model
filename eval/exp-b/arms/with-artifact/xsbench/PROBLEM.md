@@ -23,6 +23,13 @@ about how long they take.
 
 Report the reported lookup rate and the runtime. XSBench prints both.
 
+**The allocation exposes both hardware threads per core** (`--threads-per-core=2`
+at the job level). Your `srun` step may request either one or two per core --
+fewer than the allocation holds is allowed, more is not. **State what you want
+explicitly**, because a step that does not state it is placed by whatever the
+allocation happens to expose rather than by what you intended. This is part of
+the configuration, not part of the environment.
+
 The cross-section grid is several GB and each lookup indexes into it at a
 location determined by the particle's energy -- the accesses are effectively
 random and do not prefetch.

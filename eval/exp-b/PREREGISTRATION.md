@@ -436,3 +436,108 @@ expensive force path counts.
 **Comparison set:** the existing no-artifact (5.47 s) and with-artifact
 (10.98 s) configs are re-timed in the same allocation as the new arm, so drift
 cannot masquerade as an effect. n=5, interleaved, equal-work gate as before.
+
+## Round 5 pre-registration: XSBench, with round 4's decisions in hand (2026-09-17, before any session)
+
+The 2026-08-13 XSBench pre-registration above still stands and must be scored
+against, not quietly replaced. What follows sharpens it, because three things
+have happened since it was written.
+
+**What changed.** (1) The build question is settled: the conflict is
+craype-hugepages vs **lld**, not vs PrgEnv-amd, and three routes work including
+`-fuse-ld=bfd`. The artifact's pitfall asserted the opposite and an arm acted on
+it; the correction is recorded in the pitfall's own `correction` field.
+(2) LULESH round 4 produced six arms whose *decisions* we can read even though
+they have never been timed. (3) `problem-xsbench.md` gained the hardware-thread
+paragraph LULESH already had, because a step that does not state
+`--threads-per-core` is placed by the allocation rather than by the arm, and
+that hidden variable was worth 2.36x on LULESH.
+
+### The prediction, and it is about decisions rather than seconds
+
+Round 4 on LULESH, where **declining** huge pages is the correct call:
+
+    control    (no artifact)   took huge pages 2 of 3     WRONG
+    treatment  (artifact)      declined        3 of 3     RIGHT
+
+The control's reasoning is not regime-aware; it takes the module by default.
+XSBench is the case where taking them is **correct**, so:
+
+| | LULESH (streaming) | XSBench (random gather) |
+|---|---|---|
+| correct decision | decline | take |
+| control | took, 2/3 — **observed** | **predict: takes → right by default** |
+| treatment | declined, 3/3 — **observed** | **predict: takes → right by regime** |
+
+**The primary prediction is that the treatment arm's decision tracks the regime
+across both benchmarks and the control's does not** — the control being right on
+XSBench for the same reason it was wrong on LULESH. That is the hypothesis in
+its cleanest form and it is readable from the `SOLUTION.sh` files alone.
+
+**The corollary, registered now so it cannot look like a retreat later: this
+predicts the XSBench TIMING is a TIE.** If both arms take huge pages, the
+page-size lever is equalised and the seconds will not separate them. A null on
+time is the *expected* outcome of the primary prediction, not a failure of it.
+The round's power is in the 2x2 above, and the timing exists to confirm the
+lever was real rather than to rank the arms.
+
+### Second axis: SMT
+
+`cpu.smt_benefit` says latency-bound kernels gain (chase +69.7%) and
+bandwidth-saturated ones lose (stream -5.0%). XSBench is random-gather,
+latency-bound: the claim predicts SMT **helps**. Round 4 uptake was 1 of 3
+treatment and 0 of 3 control.
+
+**Predict: treatment requests `--threads-per-core=2` more often than control.**
+Weaker than the page-size axis — three draws cannot separate 2/3 from 1/3 — so
+this is recorded as a secondary observation, not a test.
+
+### The build confound, and how it is decomposed
+
+The treatment arm is told the three routes that reconcile huge pages with a
+compiler. The control must derive them, and round 3's control **failed to build
+outright** for exactly this reason. So a treatment win could be a build-success
+effect rather than a page-size effect. Three gates, reported separately:
+
+1. **Decided** — does `SOLUTION.sh` load a `craype-hugepages` module?
+2. **Linked** — does `build` succeed?
+3. **Provisioned** — does the run actually obtain 2 MB pages?
+   `grep -c 'AnonHugePages:\s*[1-9]' /proc/<pid>/smaps` during the run.
+
+Gate 3 is not optional. The artifact's own `mem.page_backing` verdict is
+`contradicted` — THP is `never`, the hugetlb pool holds 4 pages with 0 free, and
+both normal paths fail **silently**. A relinked binary that falls back to 4K
+looks exactly like one that worked.
+
+**If neither arm clears gate 3, the round measured nothing** and must be
+reported that way rather than as a null. That is this round's
+verify-the-manipulation check.
+
+**A control build failure is an arm outcome, not a re-roll.** It is recorded in
+its own category and the timing analysis proceeds on the arms that built. This
+settles the open question in `NEXT.md`: report it as-is *and* disclose it as a
+separate outcome, rather than folding it into the timing or re-rolling the draw.
+
+### Falsifiers
+
+- **Treatment declines huge pages on XSBench.** The worst outcome, and already
+  named in the 2026-08-19 design: we have taught it to fear the number rather
+  than to match the regime, which is a worse artifact than before because it now
+  suppresses a real 2.4x where the mechanism genuinely applies.
+- **Control declines on XSBench.** Then the control reads the code rather than
+  defaulting, LULESH's 2/3 was a coin flip, and the decision contrast dissolves.
+  Three draws per arm is thin; say so.
+- **Both take them and the timing gap is large and favours treatment.** The win
+  is coming from something other than page size — geometry, binding, or the
+  build route. Decompose with a one-knob run before claiming anything.
+- **The arms converge completely, as five of six did on LULESH.** Then XSBench
+  does not discriminate either, and the honest conclusion is that this
+  application set cannot separate the arms on configuration at all.
+
+### Method
+
+Unchanged and inherited: three draws per arm, fresh session per draw, same model
+and effort recorded before the runs, separate scratch directories, equal-work
+gate (`-p 500000 -l 34 -m history -s large -G unionized`), interleaved passes in
+one allocation, Welch t-test, `collect.py` reports NULL rather than a small win
+when the gap sits inside the spread. Arm key: `ARM-KEY-xsbench.md`.
