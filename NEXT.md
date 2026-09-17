@@ -242,3 +242,82 @@ the thesis inside a single claim.
 - corsys4 conditions retrofit; registry pin 0.1 vs 0.6.
 - `cpu.system_interference` untested; QMCPACK still named in the briefing, so it
   is burned as a test application until generalised.
+
+---
+
+# 2026-09-17 — pick up here. Everything above is superseded.
+
+## What changed
+
+The comparison is no longer two arms one file apart. It is a **pipeline** —
+artifact + a measured application profile + a prompt built to use both — against
+what a domain scientist does today. Read `machine-model-closed-loop-design` in
+memory first; the full design is in `eval/exp-b/PREREGISTRATION.md`, section
+"The four-condition design".
+
+**Why it changed.** Two findings, both from existing data, neither needing a run:
+
+1. **Every lever the artifact adds over a web baseline is a MAGNITUDE lever.**
+   Experiment A's scorer notes say it plainly: on q09 web is *correct* ("TLB
+   reach from first principles. **No magnitude**"), on q12 its low-confidence
+   guess is the right answer, on q11 "direction right, declined to quote a
+   crossover". So a binary-decision experiment ties by construction — which
+   explains round 3, round 4's five-of-six convergence, and predicts XSBench.
+2. **Round 4's arms, graded without running them:** 5 of 6 classified the regime
+   CORRECTLY and 5 of 6 still chose SMT wrong. B2 and B3 quote `smt_benefit`'s
+   -5.0%, correctly call themselves bandwidth-saturated, and decline — textbook
+   use, wrong answer, because the truth is +4%. **The claim failed, not the
+   reader.** Meanwhile machine-side magnitudes were right (B2's "~178 GB/s") and
+   app-side magnitudes were 1.5-3x low (A1: 8 GB/node vs a measured 24.6).
+
+## The four conditions
+
+    1  naive prompt, no artifact, no profile     current practice
+    2  naive prompt + artifact                   ALREADY GENERATED = round 4, unrun
+    3  pipeline prompt + artifact + profile      the full system
+    4  pipeline prompt + profile, no artifact    isolates prompt+loop from artifact
+
+**Prediction, pre-registered: the curve is NOT monotone.** Condition 2 dips
+BELOW condition 1 (that is round 3's 102% loss with every fact correct), then 3
+rises above both. A dip-then-rise is a far stronger result than a rising bar
+chart. The outcome to watch is 4 ≈ 3, which would say measuring the application
+is the whole lever.
+
+## Instrumentation — BUILT AND PUSHED, never run on Frontier
+
+`obs.counter_access` (registry 0.7) records what a user can actually read.
+Working: `instructions`, `cycles`, `dTLB-load-misses`, and — through PAPI, not
+perf — `DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM:MEM_IO_LCL`/`:MEM_IO_RMT`. Blocked:
+all `amd_df` uncore, IBS, `PAPI_L3_TCM`, perf's generic `LLC-load-misses`.
+
+`frontier/scripts/profile_wrap.sh` + `src/papi_launch.c` produce `profile.json`:
+footprint, IPC, dTLB/kiloinstruction, DRAM MB/s vs peak, remote fill fraction.
+Five events on five counters — the hardware limit, not a preference.
+
+## NEXT, in order
+
+1. **Validate `profile_wrap.sh` on Frontier against `bin/ptrchase`**, whose
+   behaviour is already known, so the profile has a predicted answer.
+   `module load papi && make papi`, then
+   `srun -n1 -c 56 ./scripts/profile_wrap.sh ./bin/ptrchase --curve` and
+   `./scripts/profile_wrap.sh --merge`.
+2. **Write the round-4 grading into `eval/exp-b/RESULTS.md`** (it exists only in
+   memory: `machine-model-round4-grading`).
+3. **Patch `cpu.smt_benefit`'s `measured_under`** — say the rule came from pure
+   microkernels and does not transfer to kernels that mix regimes. One field,
+   traceable to a measured arm decision, independent of any experiment.
+4. **Replace `setup.sh`'s "arms differ by exactly MACHINE.md" gate** with a
+   declared-manifest check. Pipeline arms legitimately differ in more than one
+   file; dropping the check entirely is how a confound gets in.
+5. **Pilot: 2-3 pipeline-prompt sessions**, no allocation needed, to see whether
+   an arm actually writes a usable `PHASE1.sh` before committing to a round.
+6. Then run the four conditions. **8 draws per condition, not 3** — at n=3
+   perfect separation is p=0.10 by Fisher's exact.
+
+## Still open from before, unchanged
+
+- XSBench arms are built and leak-gated but were set up under the OLD two-arm
+  design; `ARM-KEY-xsbench.md` and its pre-registration need rereading against
+  the four-condition design before anything runs.
+- corsys4 conditions retrofit; registry pin 0.1 vs 0.7.
+- `cpu.system_interference` untested; QMCPACK still named in the briefing.
