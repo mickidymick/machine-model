@@ -1208,15 +1208,16 @@
         "workload": "64 KB TLB-resident buffer vs 512 MB random dependent chase, 40e6 dependent loads each",
         "page_backing_confirmed": "smaps_rollup AnonHugePages=0, Private_Hugetlb=0 -- 4K on both nodes",
         "job2": "5498974, 2026-09-17, 1 node, frontier09053 -- AMD-specific routes",
-        "nodes_sampled": "frontier07853 and frontier09053, plus login03"
+        "nodes_sampled": "frontier07853, frontier09053, frontier01838, plus login03",
+        "job3": "5499095, 2026-09-17, frontier01838 -- PAPI native and perftools"
       },
       "measured": {
         "available": {
           "instructions": "live",
           "cycles": "live -- so IPC is obtainable",
           "dTLB-load-misses": "live on COMPUTE, 24010x between the two arms on confirmed 4K backing",
-          "l2_cache_req_stat.ic_dc_miss_in_l2": "live, 1174x between the two arms. An L2 MISS counter -- L2 misses reach L3, so this is memory-hierarchy pressure, NOT an L3-miss count and NOT DRAM traffic.",
-          "internal_control": "The instruction-cache variants of the same event family barely move (ic_fill_hit_x 0.85x, ic_fill_hit_s 7.7x) while the data-side miss event moves 1174x. Both arms execute identical code, so an i-cache event SHOULD be flat. That is an unplanned control confirming the family counts what it names."
+          "l2_cache_req_stat.ic_dc_miss_in_l2": "live and stable across two compute nodes -- 1174x on frontier09053, 1125x on frontier01838, on confirmed 4K backing. An L2 MISS counter: L2 misses reach L3, so this is memory-hierarchy pressure, NOT an L3-miss count and NOT DRAM traffic.",
+          "internal_control": "RETRACTED 2026-09-17, same day it was recorded. From frontier09053 alone the instruction-cache variants looked like an unplanned control: ic_fill_hit_x moved 0.85x while the data-side miss event moved 1174x, which is what identical code in both arms should produce. On frontier01838 the SAME event moved 387x. One node, one draw, stated as a property of the counter family -- the error this project documents in others. The probe reported only ratios and not absolute counts, so a ratio computed on near-zero counts (0 -> 386 reads as x387) could not be told from a real effect. The probe now prints both counts and refuses to call an event a discriminator when the large arm's count is under 10,000."
         },
         "unavailable": {
           "LLC-load-misses": "<not supported> via perf, and PAPI_L3_TCM reports No -- no cache-miss route at all",
@@ -1229,18 +1230,25 @@
         "the_finding": "dTLB-load-misses on the LOGIN node returns 7x between the two arms, on CONFIRMED 4K backing, where the compute node returns 24010x. The event is readable, reports a plausible number, and is not counting. Nothing distinguishes it from a working counter except a workload whose answer is known in advance. Second finding, 2026-09-17: what perf ENUMERATES and what a user can READ are different sets in both directions -- amd_df DRAM events are advertised and unreadable, while the Zen fill-source events are readable in principle and not advertised. An availability list is not a capability.",
         "other_routes": {
           "PAPI": "present, 27 events. PAPI_TOT_INS / PAPI_TOT_CYC / PAPI_TLB_DM yes; PAPI_L3_TCM no.",
-          "cray_perftools": "full stack installed, perftools-base/24.11.0 loaded by default, plus perftools-lite{,-events,-loops,-hbm,-gpu} and perftools-preload. The remaining route to DRAM bandwidth.",
+          "cray_perftools": "pat_run is PRESENT and runnable; the first attempt failed on our own bad flag (-o is not a pat_run option) and the log read like a refusal. Corrected to `pat_run -- <exe>`. Its -E option names events explicitly, which is a second route to the DRAM counters. Still unproven.",
           "rocprof": "absent from the default environment (needs module load rocm)"
+        },
+        "papi_native": {
+          "status": "THE ROUTE TO PER-PROCESS DRAM TRAFFIC, pending a read",
+          "found": "papi_native_avail lists DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM and ANY_DATA_CACHE_FILLS_FROM_SYSTEM, with umasks separating 'Fill from DRAM or IO connected in same node' from 'different node'.",
+          "why_it_matters": "These are the Zen fill-by-data-source events perf's event table does not name. They are CORE events, so paranoid=1 should permit them, and fills x 64 B is DRAM traffic attributable to THIS PROCESS -- better for profiling than the socket-wide Data Fabric counter, which counts every other job on the node too. The local/remote split additionally measures NUMA traffic directly.",
+          "not_yet_read": "This is an ENUMERATION, the same kind of evidence as perf list, which advertised amd_df events that all return <not supported>. A libpapi-linked probe is required before any of this counts as available."
         }
       },
-      "not_measured": "Three routes to DRAM traffic remain untried, and the claim must not be read as 'DRAM bandwidth is unobtainable here': (1) PAPI NATIVE events -- the 27 figure is PRESETS, a curated subset; the native catalogue is the raw PMU list and is where fill-source events would appear. Reading one needs a libpapi-linked probe. (2) Cray perftools pat_run / perftools-lite-hbm -- vendor-supported, installed, loaded by default, and independent of perf's event table. (3) raw event encodings for amd_l3 and for family-19h fill-source events -- deliberately NOT attempted, because guessing an event code yields a plausible number that counts the wrong thing, which is this probe's own established failure mode. Also unmeasured: the cause of the login-node dTLB anomaly, and whether the L2-miss event's ratio is stable across nodes.",
+      "not_measured": "DRAM traffic is NOT established as unobtainable -- two concrete routes are now identified and unread: (1) PAPI native DEMAND_DATA_CACHE_FILLS_FROM_SYSTEM via a libpapi-linked probe, which is the next build; (2) pat_run -E with explicit events. Raw event encodings remain deliberately unattempted: guessing an event code yields a plausible number counting the wrong thing, this probe's own repeated failure mode. Also unmeasured: the cause of the login-node dTLB anomaly, and whether ic_dc_miss_in_l2 holds its ratio beyond the two nodes sampled.",
       "mechanism": "perf_event_paranoid gates system-wide collection, and an uncore PMU has no per-process mode -- a DRAM controller counts for the whole socket regardless of who asks. So core events survive the restriction and uncore events cannot, independently of whether the kernel enumerates them. `perf list` reports what the kernel knows how to encode, never what this user may read, and the two are not the same set.",
       "consequence": "An application-profiling campaign designed from `perf list` would budget for DRAM bandwidth it cannot obtain, and -- on a login node -- would collect TLB numbers that look reasonable and measure nothing.",
       "note": "Recorded 2026-09-17 while establishing whether the closed-loop application-profile design is buildable. It is: footprint (no counters) and IPC (core counters) are both available unprivileged on a compute node, and those are the two quantities the round-4 arm grading showed were wrong or missing. THP=never and hugetlb 4/0 were re-observed on frontier07853, independently re-confirming mem.page_backing on a node not previously sampled. Extended 2026-09-17 after testing the AMD-specific paths: three of the four levers the closed-loop design needs are instrumentable today -- TLB miss rate (page-size penalty), IPC (SMT), and message sizes (host/device, no counters needed). Only cost.loaded_latency_knee is blocked, because it needs achieved DRAM bandwidth against the measured peak and no route to DRAM traffic has yet been demonstrated.",
       "evidence": [
         "results-frontier/counters_compute_5498474.txt",
         "scripts/21_counter_capability.sh",
-        "results-frontier/counters_amd_routes.txt"
+        "results-frontier/counters_amd_routes.txt",
+        "results-frontier/counters_tier3.txt"
       ]
     }
   ],
