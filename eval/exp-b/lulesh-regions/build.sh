@@ -20,13 +20,21 @@ SRC="$EXPB/pristine-lulesh"
 OUT="$EXPB/bin"
 
 [ -d "$SRC" ] || { echo "no source at $SRC -- run setup_bench.sh lulesh first" >&2; exit 1; }
-PAPI_DIR=${PAPI_DIR:-${PAPI_ROOT:-}}
-[ -n "$PAPI_DIR" ] || { echo "PAPI_DIR unset -- module load papi" >&2; exit 1; }
 mkdir -p "$OUT"
 
 CXX_BASE="${RG_CXX:-CC} -DUSE_MPI=${RG_USE_MPI:-1}"
-PAPI_FLAGS="-I$PAPI_DIR/include"
-PAPI_LIBS="-L$PAPI_DIR/lib -Wl,-rpath,$PAPI_DIR/lib -lpapi"
+# Frontier's papi module sets no PAPI_DIR: the Cray CC wrapper adds PAPI's
+# include and lib paths itself once the module is loaded, so plain -lpapi is
+# right there (frontier/Makefile relies on the same thing). An explicit
+# PAPI_DIR/PAPI_ROOT, e.g. a manual install, is honoured when set.
+PAPI_DIR=${PAPI_DIR:-${PAPI_ROOT:-}}
+if [ -n "$PAPI_DIR" ]; then
+  PAPI_FLAGS="-I$PAPI_DIR/include"
+  PAPI_LIBS="-L$PAPI_DIR/lib -Wl,-rpath,$PAPI_DIR/lib -lpapi"
+else
+  PAPI_FLAGS=""
+  PAPI_LIBS="-lpapi"
+fi
 
 build() {
   variant=$1; extra=$2
@@ -44,7 +52,9 @@ build() {
       CXXFLAGS="-g -O3 $extra -I. -Wall $PAPI_FLAGS" \
       LDFLAGS="-g -O3 $extra $PAPI_LIBS" \
       >"$OUT/build_regions_${variant}.log" 2>&1
-  ) || { echo "BUILD FAILED ($variant) -- see $OUT/build_regions_${variant}.log" >&2; exit 1; }
+  ) || { echo "BUILD FAILED ($variant) -- tail of $OUT/build_regions_${variant}.log:" >&2
+         tail -5 "$OUT/build_regions_${variant}.log" >&2
+         echo "(papi.h or -lpapi not found usually means: module load papi)" >&2; exit 1; }
   cp "$tree/lulesh2.0" "$OUT/lulesh-regions-$variant"
   rm -rf "$tree"
   echo "built $OUT/lulesh-regions-$variant"
