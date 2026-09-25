@@ -23,3 +23,6 @@ eval/exp-b/arms/*/*/SOLUTION.sh
 
 # Related-work PDFs are fetched, not authored; papers/README.md indexes them.
 papers/*.pdf
+
+# LULESH binaries from build_spread.sh / lulesh-regions/build.sh -- built per machine
+eval/exp-b/bin/

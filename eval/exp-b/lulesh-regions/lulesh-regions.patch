@@ -1,0 +1,131 @@
+--- a/lulesh.cc	2026-09-25 11:09:39.600905403 -0400
++++ b/lulesh.cc	2026-09-25 11:09:39.624905525 -0400
+@@ -160,6 +160,7 @@
+ #endif
+ 
+ #include "lulesh.h"
++#include "regions.h"   /* lulesh-regions: ground-truth phase counters */
+ 
+ /* Work Routines */
+ 
+@@ -1069,6 +1070,7 @@
+       Real_t *sigzz  = Allocate<Real_t>(numElem) ;
+       Real_t *determ = Allocate<Real_t>(numElem) ;
+ 
++      rg_mark(RG_STRESS);
+       /* Sum contributions to total stress tensor */
+       InitStressTermsForElems(domain, sigxx, sigyy, sigzz, numElem);
+ 
+@@ -1090,6 +1092,7 @@
+          }
+       }
+ 
++      rg_mark(RG_HOURGLASS);
+       CalcHourglassControlForElems(domain, determ, hgcoef) ;
+ 
+       Release(&determ) ;
+@@ -1103,6 +1106,7 @@
+ 
+ static inline void CalcForceForNodes(Domain& domain)
+ {
++  rg_mark(RG_FORCE_SETUP);
+   Index_t numNode = domain.numNode() ;
+ 
+ #if USE_MPI  
+@@ -1120,6 +1124,7 @@
+ 
+   /* Calcforce calls partial, force, hourq */
+   CalcVolumeForceForElems(domain) ;
++  rg_mark(RG_FORCE_COMM);
+ 
+ #if USE_MPI  
+   Domain_member fieldData[3] ;
+@@ -1233,6 +1238,7 @@
+   /* time of boundary condition evaluation is beginning of step for force and
+    * acceleration boundary conditions. */
+   CalcForceForNodes(domain);
++  rg_mark(RG_NODAL);
+ 
+ #if USE_MPI  
+ #ifdef SEDOV_SYNC_POS_VEL_EARLY
+@@ -1249,6 +1255,7 @@
+    CalcVelocityForNodes( domain, delt, u_cut, domain.numNode()) ;
+ 
+    CalcPositionForNodes( domain, delt, domain.numNode() );
++   rg_mark(RG_POSVEL_COMM);
+ #if USE_MPI
+ #ifdef SEDOV_SYNC_POS_VEL_EARLY
+   fieldData[0] = &Domain::x ;
+@@ -1957,6 +1964,7 @@
+             2*domain.sizeX()*domain.sizeZ() + /* row ghosts */
+             2*domain.sizeY()*domain.sizeZ() ; /* col ghosts */
+ 
++      rg_mark(RG_QGRAD);
+       domain.AllocateGradients(numElem, allElem);
+ 
+ #if USE_MPI      
+@@ -1967,6 +1975,7 @@
+ 
+       /* Calculate velocity gradients */
+       CalcMonotonicQGradientsForElems(domain);
++      rg_mark(RG_Q_COMM);
+ 
+ #if USE_MPI      
+       Domain_member fieldData[3] ;
+@@ -1985,6 +1994,7 @@
+       CommMonoQ(domain) ;
+ #endif      
+ 
++      rg_mark(RG_QREGION);
+       CalcMonotonicQForElems(domain);
+ 
+       // Free up memory
+@@ -2431,13 +2441,16 @@
+ static inline
+ void LagrangeElements(Domain& domain, Index_t numElem)
+ {
++  rg_mark(RG_KINEMATICS);
+   CalcLagrangeElements(domain) ;
+ 
+   /* Calculate Q.  (Monotonic q option requires communication) */
+   CalcQForElems(domain) ;
+ 
++  rg_mark(RG_EOS);
+   ApplyMaterialPropertiesForElems(domain) ;
+ 
++  rg_mark(RG_VOLUMES);
+   UpdateVolumesForElems(domain, 
+                         domain.v_cut(), numElem) ;
+ }
+@@ -2635,6 +2648,7 @@
+ #endif
+ #endif   
+ 
++   rg_mark(RG_TIMECONSTR);
+    CalcTimeConstraintsForElems(domain);
+ 
+ #if USE_MPI   
+@@ -2732,6 +2746,7 @@
+    MPI_Barrier(MPI_COMM_WORLD);
+ #endif   
+    
++   rg_init();
+    // BEGIN timestep to solution */
+ #if USE_MPI   
+    double start = MPI_Wtime();
+@@ -2744,6 +2759,7 @@
+ //      std::cout << "region" << i + 1<< "size" << locDom->regElemSize(i) <<std::endl;
+    while((locDom->time() < locDom->stoptime()) && (locDom->cycle() < opts.its)) {
+ 
++      rg_mark(RG_TIMEINC);
+       TimeIncrement(*locDom) ;
+       LagrangeLeapFrog(*locDom) ;
+ 
+@@ -2765,6 +2781,7 @@
+    gettimeofday(&end, NULL) ;
+    elapsed_time = (double)(end.tv_sec - start.tv_sec) + ((double)(end.tv_usec - start.tv_usec))/1000000 ;
+ #endif
++   rg_finish(myRank, elapsed_time, (long)locDom->cycle());
+    double elapsed_timeG;
+ #if USE_MPI   
+    MPI_Reduce(&elapsed_time, &elapsed_timeG, 1, MPI_DOUBLE,
