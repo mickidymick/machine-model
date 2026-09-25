@@ -296,11 +296,32 @@ Five events on five counters — the hardware limit, not a preference.
 
 ## NEXT, in order
 
-1. **Validate `profile_wrap.sh` on Frontier against `bin/ptrchase`**, whose
-   behaviour is already known, so the profile has a predicted answer.
-   `module load papi && make papi`, then
-   `srun -n1 -c 56 ./scripts/profile_wrap.sh ./bin/ptrchase --curve` and
-   `./scripts/profile_wrap.sh --merge`.
+1. ~~**Validate `profile_wrap.sh` on Frontier**~~ **DONE 2026-09-25**, jobs
+   5545587-5545735. Validated against three known-answer targets. Four bugs
+   found; three were flagged by its own checks before I understood them. See
+   memory `machine-model-profiler-validated`. Headlines:
+   - `PAPI_attach` needs `PAPI_assign_eventset_component` FIRST.
+   - **We were counting the master thread only** -- bwmatrix at 1 vs 8 threads
+     gave instruction counts 0.1% apart while RSS went 8x. Frontier's PAPI
+     REFUSES `PAPI_GRN_PROC`; `PAPI_INHERIT` works.
+   - **`ANY_` fills, not `DEMAND_`** -- DEMAND misses prefetched lines and
+     recorded 0.32x of a copy benchmark's own traffic. `ptrchase` could not catch
+     this: unprefetchable, so the two agreed to 0.01%.
+   - `bytes_from_dram` is a **LOWER BOUND** (0.94x unprefetchable, 0.71-0.87x
+     prefetch-friendly) because L2-prefetched lines fill L1 from L2, not from
+     system. Recorded in the profile JSON itself.
+   - `make check-profile` -- 17 assertions, no libpapi, no allocation.
+
+1b. **PROFILE LULESH.** The one thing left before the pipeline can run, and the
+   number that matters is **IPC**: round 4's arms called LULESH
+   bandwidth-saturated correctly and still chose SMT wrong (truth is +4%).
+   Blocked only on finding the binary:
+   `find ~ $MEMBERWORK/csc617 -name 'lulesh2.0' -type f`
+   Then, with `module load papi rocm`:
+   `srun -N1 -n8 -c7 --threads-per-core=1 ./scripts/profile_wrap.sh ./lulesh2.0 -s 150 -r 11 -b 0 -c 64 -i 20`
+   then `./scripts/profile_wrap.sh --merge`.
+   Read it knowing the profile is a WHOLE-RUN AGGREGATE and LULESH has ~15
+   kernels -- a middling IPC means blended phases, not a middling kernel.
 2. **Write the round-4 grading into `eval/exp-b/RESULTS.md`** (it exists only in
    memory: `machine-model-round4-grading`).
 3. **Patch `cpu.smt_benefit`'s `measured_under`** — say the rule came from pure
@@ -321,3 +342,18 @@ Five events on five counters — the hardware limit, not a preference.
   the four-condition design before anything runs.
 - corsys4 conditions retrofit; registry pin 0.1 vs 0.7.
 - `cpu.system_interference` untested; QMCPACK still named in the briefing.
+
+## Frontier operational notes, each of which cost a cycle on 2026-09-25
+
+- **Modules do not survive into a new shell.** `papi` and `rocm` both bit, and
+  each presents differently: a missing header, a missing shared library, or a
+  compiler that silently changed (clang errors where gcc had been). Worth an
+  `env.sh` in the repo.
+- **`bin/ptrchase` and `bin/bwmatrix` need `module load rocm`** even though they
+  are CPU-only, because `bin/` is gitignored and the Frontier binaries were built
+  with `craype-accel-amd-gfx90a` in the environment, so they link
+  `libamdhip64.so.6`. Same trap that produced a false null in July.
+  `make clean cpu` in a clean environment fixes it properly.
+- **The evidence files cited by `obs.counter_access` exist only on Frontier.**
+  `results-frontier/` is gitignored, so `counters_*.txt` and `papi_*.txt` are not
+  in either repo or on the laptop. Still not pulled back.
