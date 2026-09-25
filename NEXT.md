@@ -350,10 +350,18 @@ Five events on five counters — the hardware limit, not a preference.
   compiler that silently changed (clang errors where gcc had been). Worth an
   `env.sh` in the repo.
 - **`bin/ptrchase` and `bin/bwmatrix` need `module load rocm`** even though they
-  are CPU-only, because `bin/` is gitignored and the Frontier binaries were built
-  with `craype-accel-amd-gfx90a` in the environment, so they link
-  `libamdhip64.so.6`. Same trap that produced a false null in July.
-  `make clean cpu` in a clean environment fixes it properly.
+  are CPU-only: they link `libamdhip64.so.6`. **Cause, confirmed 2026-09-25:
+  the default login environment has `rocm/6.2.4` loaded, and with it loaded the
+  `CC` wrapper puts `libamdhip64` in DT_NEEDED of EVERY binary** -- no accel
+  module involved (it was not loaded; blaming `craype-accel-amd-gfx90a` was
+  wrong). `readelf -d` on a fresh `lulesh-omp` shows it; `libhsa-runtime64` comes
+  in transitively. Harmless at runtime when HIP is never called (ROCm 6 inits
+  lazily), fatal at launch if `rocm` is not loaded -- the July false null.
+  `module unload rocm` before building a CPU-only tool fixes it properly.
+- **The LULESH spread-probe binaries were gone** (`eval/exp-b/bin/` gitignored,
+  Frontier clone was at `444939e`). Rebuilt 2026-09-25 with `build_spread.sh`,
+  same pin `3e01c40`, same script; compiler modules may differ from August.
+  Re-time one ground-truth config before comparing timings to `SPREAD-RESULTS.md`.
 - **The evidence files cited by `obs.counter_access` exist only on Frontier.**
   `results-frontier/` is gitignored, so `counters_*.txt` and `papi_*.txt` are not
   in either repo or on the laptop. Still not pulled back.
